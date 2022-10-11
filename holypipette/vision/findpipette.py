@@ -23,7 +23,7 @@ def pipette_cardinal(image):
 #####HOANG
 def pipette_cardinal2(image1, image2):
     xmax = None
-    for direction in cardinal_points.iterkeys():
+    for direction in cardinal_points:
         x = crop_cardinal(image1, direction).flatten().sum() - crop_cardinal(image2, direction).flatten().sum()
         if (xmax is None) or (abs(x) > xmax):
             xmax = abs(x)

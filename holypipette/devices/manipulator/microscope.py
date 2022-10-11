@@ -6,7 +6,7 @@ TODO:
 * a umanager class that autoconfigures with umanager config file
 * steps for stack acquisition?
 '''
-from holypipette.devices.manipulator import *
+from holypipette.devices.manipulator import Manipulator
 import time
 import warnings
 try:

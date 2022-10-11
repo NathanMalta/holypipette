@@ -6,7 +6,7 @@ from holypipette.log_utils import console_logger
 from holypipette.interface.pipettes import PipetteInterface
 from holypipette.gui.manipulator import ManipulatorGui
 
-from setup_script import *
+from setup_fake_rig import *
 
 console_logger()  # Log to the standard console as well
 

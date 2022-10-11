@@ -13,7 +13,7 @@ __all__ = ['FakeManipulator']
 class FakeManipulator(Manipulator):
     def __init__(self, min=None, max=None, angle=25.):
         Manipulator.__init__(self)
-        self.x = zeros(9) # Position of all axes
+        self.x = zeros(6) # Position of all axes
         # Minimum and maximum positions for all axes
         self.min = min
         self.max = max
@@ -22,9 +22,9 @@ class FakeManipulator(Manipulator):
             raise ValueError('Need to provide either both minimum and maximum '
                              'range or neither')
         if all([min is not None, max is not None]):
-            if len(min) != 9 or len(max) != 9:
+            if len(min) != 6 or len(max) != 6:
                 raise ValueError('min/max argument needs to be a vector of '
-                                 'length 9.')
+                                 'length 6.')
         self.angle = angle*pi/180
 
     def position(self, axis):
@@ -54,4 +54,10 @@ class FakeManipulator(Manipulator):
             self.x[axis-1] = x
         else:
             self.x[axis-1] = clip(x, self.min[axis-1], self.max[axis-1])
-        self.debug('FakeManipulator moved to: {}'.format(self.x))
+
+        if 1 <= axis <= 3:
+            self.debug(f'Pipette Moved To: {self.x[:3]}')
+        elif 4 <= axis <= 6:
+            self.debug(f'Stage Moved To: {self.x[3:]}')
+        else:
+            self.debug(f"moved unknown axis: {axis}")

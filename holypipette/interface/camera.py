@@ -20,7 +20,7 @@ class CameraInterface(TaskInterface):
         self.camera = camera
         self.with_tracking = with_tracking
         if with_tracking:
-            self.multitracker = cv2.MultiTracker_create()
+            self.multitracker = cv2.legacy.MultiTracker_create()
             self.movingList = []
         else:
             self.multitracker = None

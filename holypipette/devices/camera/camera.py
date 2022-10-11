@@ -126,7 +126,7 @@ class AcquisitionThread(threading.Thread):
             acquired_frames += 1
             if snap_time - last_report > 1:
                 frame_rate = acquired_frames / (snap_time - last_report)
-                print('Acquiring {:.1f} fps'.format(frame_rate))
+                # print('Acquiring {:.1f} fps'.format(frame_rate))
                 last_report = snap_time
                 acquired_frames = 0
         
@@ -315,7 +315,7 @@ class FakeCamera(Camera):
         if self.manipulator is not None:
             # Use the part of the image under the microscope
 
-            stage_x, stage_y, stage_z = self.manipulator.position_group([7, 8, 9])
+            stage_x, stage_y, stage_z = self.manipulator.position_group([4, 5, 6])
             stage_z -= self.image_z
             stage_x *= self.scale_factor
             stage_y *= self.scale_factor
@@ -337,8 +337,7 @@ class FakeCamera(Camera):
                 frame[((xx - (p_x - stage_x))*np.cos(p_angle) + (yy - (p_y - stage_y))*np.sin(p_angle))**2 / (p_width/2)**2 +
                       ((xx - (p_x - stage_x))*np.sin(p_angle) - (yy - (p_y - stage_y))*np.cos(p_angle))**2 / (p_height/2)**2 < 0.8] = 100
 
-            for direction, axes in [(np.pi/2, [1, 2, 3]),
-                                    (-np.pi/2, [4, 5, 6])]:
+            for direction, axes in [(-np.pi/2, [1, 2, 3])]:
                 manipulators = np.zeros((self.height, self.width), dtype=np.int16)
                 x, y, z = self.manipulator.position_group(axes)
                 # Quick&dirty 3D transformation
@@ -367,6 +366,7 @@ class FakeCamera(Camera):
             frame = np.array(img.resize((self.width, self.height)))
         exposure_factor = self.exposure_time/30.
         frame = frame + np.random.randn(self.height, self.width)*5
+
         return np.array(np.clip(frame*exposure_factor, 0, 255),
                         dtype=np.uint8)
 

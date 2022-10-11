@@ -8,7 +8,6 @@ from holypipette.devices.camera.opencvcamera import OpenCVCamera
 from holypipette.devices.manipulator import *
 from holypipette.devices.amplifier.amplifier import FakeAmplifier
 from holypipette.devices.pressurecontroller import FakePressureController
-from holypipette.devices.camera.camera import FakeCamera
 import traceback
 
 
