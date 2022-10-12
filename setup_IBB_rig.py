@@ -3,21 +3,26 @@
 '''
 from holypipette.devices.amplifier.amplifier import FakeAmplifier
 from holypipette.devices.camera.pcocamera import PcoCamera
+from holypipette.devices.manipulator import SensapexManip
 from holypipette.devices.pressurecontroller import FakePressureController
 from holypipette.devices.camera.camera import FakeCamera
 from holypipette.devices.manipulator import *
 
-pipetteController = UMP.get_ump()
-
-fakeCont = FakeManipulator(min=[-4096, -4096, -1000, -4096, -4096, -1000], #TODO: replace this with scientifica stage control
+fakeController = FakeManipulator(min=[-4096, -4096, -1000, -4096, -4096, -1000],
                              max=[4096, 4096, 1000, 4096, 4096, 1000])
 
-stage = ManipulatorUnit(fakeCont, [4, 5]) 
+sensapexController = SensapexManip()
+stage = ManipulatorUnit(fakeController, [4, 5])
+
+fakeController.x[:3] = [-50, 10, 500]
+fakeController.x[5] = 520
 
 camera = PcoCamera()
-microscope = Microscope(fakeCont, 6)
+microscope = Microscope(fakeController, 6)
+microscope.floor_Z = 0
+microscope.up_direction = 1.0
 
-units = [ManipulatorUnit(pipetteController, [1, 2, 3])] #TODO correct axes by running sensapex.py
+units = [ManipulatorUnit(sensapexController, [1, 2, 3])]
 
 amplifier = FakeAmplifier()
 pressure = FakePressureController()

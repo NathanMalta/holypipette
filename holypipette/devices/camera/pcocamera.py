@@ -1,6 +1,7 @@
 '''
 Camera for a PCO Panda Camera
 '''
+from cv2 import exp
 import numpy as np
 import time
 import copy
@@ -25,13 +26,16 @@ class PcoCamera(Camera):
         self.height = height
         self.lowerBound = 0
         self.upperBound = 2**16
+        self.currExposure = 0
         self.start_acquisition()
 
     def set_exposure(self, value):
-        self.cam.set_exposure_time(value)
+        self.cam.set_exposure_time(self.currExposure + value / 1000)
 
     def get_exposure(self):
-        return self.cam.get_exposure_time()
+        exposure = self.cam.get_exposure_time()
+        self.currExposure = exposure
+        return exposure
 
     def __del__(self):
         if hasattr(self, 'cam'):
