@@ -85,6 +85,12 @@ class IBBPressureController(PressureController):
         raw_pressure = int(pressure * IBBPressureController.nativePerMbar + IBBPressureController.nativeZero)
         return min(max(raw_pressure, 0), 4095) #clamp native units to 0-4095
 
+    def nativeToMbar(self, raw_pressure):
+        '''Comvert from native units to a pressure in mBar
+        '''
+        pressure = (raw_pressure - IBBPressureController.nativeZero) / IBBPressureController.nativePerMbar
+        return pressure
+
     def set_pressure_raw(self, raw_pressure):
         '''Tell pressure controller to go to a given setpoint pressure in native DAC units
         '''
@@ -103,12 +109,12 @@ class IBBPressureController(PressureController):
     def get_setpoint(self):
         '''Gets the current setpoint in millibar
         '''
-        self.setpoint_raw / IBBPressureController.nativePerMbar
+        return self.nativeToMbar(self.setpoint_raw)
 
     def get_setpoint_raw(self):
         '''Gets the current setpoint in native DAC units
         '''
-        self.setpoint_raw
+        return self.setpoint_raw
 
     def pulse(self, delayMs):
         '''Tell the onboard arduino to pulse pressure for a certain period of time
