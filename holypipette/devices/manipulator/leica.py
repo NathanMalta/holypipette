@@ -84,7 +84,7 @@ class Leica(Microscope):
         '''
         self.mmc.setRelativePosition(x)
 
-    def step_move(self, distance):
+    def step_move(self, x):
         self.relative_move(x)
 
     def wait_until_still(self):
