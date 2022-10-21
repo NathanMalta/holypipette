@@ -16,7 +16,7 @@ class IBBPressureController(PressureController):
        the Arduino controlling the IBB Pressure box
     '''
     validProducts = ["USB Serial"] #TODO: move to a constants or json file?
-    validVIDs = [0x1a86]
+    validVIDs = [0x1a86, 0x403]
                     
     nativePerMbar = 2.925 # The number of native pressure transucer units from the DAC (0 to 4095) in a millibar of pressure (-700 to 700)
     nativeZero = 2048 # The native units at a 0 pressure (y-intercept)
@@ -99,6 +99,8 @@ class IBBPressureController(PressureController):
         cmd = f"set {self.channel} {raw_pressure}\n"
         self.serial.write(bytes(cmd, 'ascii'))
         self.serial.flush()
+
+        print(cmd)
 
         #add expected arduino responces
         self.expectedResponses.append((time.time(), f"set {self.channel} {raw_pressure}"))
