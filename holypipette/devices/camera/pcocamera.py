@@ -1,10 +1,7 @@
 '''
 Camera for a PCO Panda Camera
 '''
-from cv2 import exp
 import numpy as np
-import time
-import copy
 
 from . import *
 import warnings
@@ -19,23 +16,30 @@ __all__ = ['PcoCamera']
 
 
 class PcoCamera(Camera):
+    PCO_RECORDER_LATEST_IMAGE = 0xFFFFFFFF
+
     def __init__(self, width=500, height=500):
         super(PcoCamera, self).__init__()
         self.cam = pco.Camera()
+        self.cam.record(number_of_images=10, mode='ring buffer') #use "ring buffer" mode for continuous streaming from camera
+        self.cam.wait_for_first_image()
         self.width = width
         self.height = height
         self.lowerBound = 0
         self.upperBound = 2**16
         self.currExposure = 0
+        self.lastFrameNum = 0
         self.start_acquisition()
 
     def set_exposure(self, value):
-        self.cam.set_exposure_time(self.currExposure + value / 1000)
+        self.cam.set_exposure_time(value / 1000)
 
     def get_exposure(self):
-        exposure = self.cam.get_exposure_time()
+        '''return the exposure time of the camera in ms
+        '''
+        exposure = self.cam.get_exposure_time() #this is in seconds
         self.currExposure = exposure
-        return exposure
+        return exposure * 1000 #convert to ms
 
     def __del__(self):
         if hasattr(self, 'cam'):
@@ -47,9 +51,10 @@ class PcoCamera(Camera):
     def reset(self):
         self.cam.close()
         self.cam = pco.Camera()
+        self.cam.record(number_of_images=10, mode='ring buffer')
+        self.cam.wait_for_first_image()
 
     def normalize(self):
-        self.cam.record()
         img, meta = self.cam.image()
 
         #is there a better way to do this?
@@ -62,8 +67,8 @@ class PcoCamera(Camera):
         Returns the current image.
         This is a blocking call (wait until next frame is available)
         '''
-        self.cam.record()
-        img, meta = self.cam.image()
+
+        img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
         img = img.astype(np.uint16)
 
         #apply upper / lower bounds (normalization)
