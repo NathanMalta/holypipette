@@ -54,20 +54,21 @@ class PcoCamera(Camera):
         self.cam.record(number_of_images=10, mode='ring buffer')
         self.cam.wait_for_first_image()
 
-    def normalize(self):
-        img, meta = self.cam.image()
+    def normalize(self, img = None):
+        if img is None:
+            img, meta = self.cam.image()
 
         #is there a better way to do this?
         #maybe 2 stdevs instead?
-        self.lowerBound = np.min(img)
-        self.upperBound = np.max(img)
+        self.lowerBound = img.min()
+        self.upperBound = img.max()
+
 
     def raw_snap(self):
         '''
         Returns the current image.
         This is a blocking call (wait until next frame is available)
         '''
-
         img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
         img = img.astype(np.uint16)
 
