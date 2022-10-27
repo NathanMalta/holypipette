@@ -29,22 +29,6 @@ class Scientifica(Manipulator):
 
         self.mmc = mmc
         self.port_name = name
-
-        # mmc.loadDevice(name, 'SerialManager', name)
-        # mmc.setProperty(name, 'AnswerTimeout', 500.0)
-        # mmc.setProperty(name, 'BaudRate', 9600)
-        # mmc.setProperty(name, 'DelayBetweenCharsMs', 0.0)
-        # mmc.setProperty(name, 'Handshaking', 'Off')
-        # mmc.setProperty(name, 'Parity', 'None')
-        # mmc.setProperty(name, 'StopBits', 1)
-        # mmc.setProperty(name, 'Verbose', 1)
-        # mmc.loadDevice('XYStage', 'Scientifica', 'XYStage')
-        # mmc.loadDevice('ZStage', 'Scientifica', 'ZStage')
-        # mmc.initializeDevice(name)
-        # mmc.initializeDevice('XYStage')
-        # mmc.initializeDevice('ZStage')
-
-        # self.mmc.loadSystemConfiguration("C:\Program Files\Micro-Manager-1.4\MMConfig_demo.cfg")
         
     def __del__(self):
         try:

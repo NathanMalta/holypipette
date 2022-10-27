@@ -13,9 +13,13 @@ from __future__ import absolute_import
 from .manipulatorunit import *
 from numpy import (array, zeros, dot, arange, vstack, sign, pi, arcsin,
                    mean, std, isnan)
+import cv2
+import numpy as np
+import time
+from holypipette.devices.manipulator import *
+
 from numpy.linalg import inv, pinv, norm
 from holypipette.vision import *
-
 
 __all__ = ['CalibratedUnit', 'CalibrationError', 'CalibratedStage']
 
@@ -1084,6 +1088,50 @@ class CalibratedStage(CalibratedUnit):
         else:
             self.M = M
 
+    def _getFocusScore(self):
+        '''Get a score stating how focused a given image is
+        Higher Score == more focused image
+        '''
+        img = self.camera.snap()
+        xEdges = cv2.Sobel(src=img, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=3)
+        yEdges = cv2.Sobel(src=img, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=3)
+        return np.sum(np.abs(xEdges)) + np.sum(np.abs(yEdges))
+
+    def autofocus(self):
+        '''Attempts to auto focus the micrscope image by moving in the z-axis
+        '''
+
+        #Idea: we move the stage in small increments, recording focus score as the stage moves
+        #Terminate once we move the stage 100 microns past it's highest value
+        #or after timeout seconds
+
+        timeout = 15 #seconds
+        self.microscope.relative_move(-1)
+        highestScore = self._getFocusScore() #the highest focus score we've seen
+        highestPos = self.microscope.position() #the micrscope pos of the highest focus score
+        pastMaxDist = 100 #microns, how far to travel past a maximum value
+        posAndFocus = []
+        commandedPos = self.microscope.position() #position setpoint
+        movementTol = 0.5 #microns, how close to setpoint to get before sending a new command
+        movementStep = -10 #microns, number of microns to command z-axis to move
+
+        startTime = time.time()
+        while (time.time() - startTime < timeout) and highestPos - self.microscope.position() < pastMaxDist:
+            if abs(commandedPos - self.microscope.position()) < movementTol:
+                #only send a new movement command if the last one was reached
+                commandedPos = self.microscope.position() + movementStep
+                self.microscope.absolute_move(commandedPos)
+
+            currScore = self._getFocusScore()
+            currPos = self.microscope.position()
+            posAndFocus.append([currPos, currScore])
+            if currScore > highestScore:
+                highestScore = currScore
+                highestPos = currPos
+        
+        #move to place with the highest score (most focused)
+        self.microscope.absolute_move(highestPos)
+        print(highestPos, highestScore)
 
     def calibrate(self):
         '''
@@ -1094,6 +1142,10 @@ class CalibratedStage(CalibratedUnit):
             self.stage.calibrate()
 
         self.info('Preparing stage calibration')
+        self.info("auto focusing microscope...")
+        self.autofocus()
+
+        return
         # Take a photo of the pipette or coverslip
         template = crop_center(self.camera.snap(), ratio=64)
 
