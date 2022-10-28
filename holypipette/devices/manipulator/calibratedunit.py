@@ -10,6 +10,7 @@ Should this be in devices/ ? Maybe in a separate calibration folder
 """
 from __future__ import print_function
 from __future__ import absolute_import
+from typing import List
 from .manipulatorunit import *
 from numpy import (array, zeros, dot, arange, vstack, sign, pi, arcsin,
                    mean, std, isnan)
@@ -1088,7 +1089,7 @@ class CalibratedStage(CalibratedUnit):
         else:
             self.M = M
 
-    def _getFocusScore(self):
+    def _getFocusScore(self) -> float:
         '''Get a score stating how focused a given image is
         Higher Score == more focused image
         '''
@@ -1096,27 +1097,21 @@ class CalibratedStage(CalibratedUnit):
         xEdges = cv2.Sobel(src=img, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=3)
         yEdges = cv2.Sobel(src=img, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=3)
         return np.sum(np.abs(xEdges)) + np.sum(np.abs(yEdges))
-
-    def autofocus(self):
-        '''Attempts to auto focus the micrscope image by moving in the z-axis
+    
+    def autofocusInDirection(self, timeout:int = 15, pastMaxDist:int = 120, movementTol:int = 0.5, movementStep:int = 10) -> tuple[int, List]:
+        ''' Move the stage in small increments of movementStep (microns), recording focus score as the stage moves.
+        Terminate once we move the stage pastMaxDist (microns) past it's highest value or after timeout (seconds).
         '''
 
-        #Idea: we move the stage in small increments, recording focus score as the stage moves
-        #Terminate once we move the stage 100 microns past it's highest value
-        #or after timeout seconds
-
-        timeout = 15 #seconds
+        #initialize relevant vars
         self.microscope.relative_move(-1)
         highestScore = self._getFocusScore() #the highest focus score we've seen
         highestPos = self.microscope.position() #the micrscope pos of the highest focus score
-        pastMaxDist = 100 #microns, how far to travel past a maximum value
         posAndFocus = []
         commandedPos = self.microscope.position() #position setpoint
-        movementTol = 0.5 #microns, how close to setpoint to get before sending a new command
-        movementStep = -10 #microns, number of microns to command z-axis to move
-
+        
         startTime = time.time()
-        while (time.time() - startTime < timeout) and highestPos - self.microscope.position() < pastMaxDist:
+        while (time.time() - startTime < timeout) and abs(highestPos - self.microscope.position()) < pastMaxDist:
             if abs(commandedPos - self.microscope.position()) < movementTol:
                 #only send a new movement command if the last one was reached
                 commandedPos = self.microscope.position() + movementStep
@@ -1128,10 +1123,33 @@ class CalibratedStage(CalibratedUnit):
             if currScore > highestScore:
                 highestScore = currScore
                 highestPos = currPos
-        
+            
         #move to place with the highest score (most focused)
         self.microscope.absolute_move(highestPos)
-        print(highestPos, highestScore)
+        
+        #wait until we reach most focused point
+        while abs(self.microscope.position() - highestPos) > movementTol and time.time() - startTime < timeout:
+            time.sleep(0.01)
+        
+        return highestPos, posAndFocus
+
+    def autofocus(self):
+        '''Attempts to auto focus the micrscope image by moving in the z-axis
+        '''
+
+        startPos = self.microscope.position()
+        refocusTol = 50 #microns, if final pos is within this tol, focus in the other direction as well.
+
+        for i in [30, 2]:
+            #first try focusing down (negative direction)
+            highestPos, posAndFocus = self.autofocusInDirection(pastMaxDist=10*i, movementStep=-i, timeout=5)
+
+            if abs(highestPos - startPos) < refocusTol:
+                #if the final pos is close to our starting pos, we need to refocus in the
+                #other direction: try focusing up (positive direction)
+                highestPos, posAndFocus = self.autofocusInDirection(pastMaxDist=5*i, movementStep=i)
+
+        posAndFocus = np.array(posAndFocus)
 
     def calibrate(self):
         '''

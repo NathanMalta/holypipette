@@ -17,6 +17,10 @@ class FakeCalCamera(Camera):
         self.frame = np.zeros((self.width // 20, self.height // 20), dtype=np.uint8)#np.array(np.clip((np.random.randn(self.width * 2, self.height * 2)*0.5)*50 + 128, 0, 255), dtype=np.uint8)
         self.frame[1::2,::2] = 255
         self.frame[::2,1::2] = 255
+
+        # uncomment this to show a cell image rather than checkerboard
+        #self.frame = cv2.imread("/Users/nathanmalta/Downloads/Camera 1_09052022_1543_pco_000019.tif", cv2.IMREAD_GRAYSCALE)
+
         #scale up to larger img 
         self.frame = cv2.resize(self.frame, dsize=(self.width * 2, self.height * 2), interpolation=cv2.INTER_NEAREST)
 
@@ -52,13 +56,13 @@ class FakeCalCamera(Camera):
 
         #add noise
         exposure_factor = self.exposure_time/30.
-        frame = frame + np.random.randn(self.height, self.width)*5
 
         #blur proportionally to how far stage_z is from 0 (being focused in the img plane)
         focusFactor = abs(stage_z) / 10
         if focusFactor == 0:
             focusFactor = 0.1
         frame = cv2.GaussianBlur(frame,(63,63), focusFactor)
+        frame = frame+ np.random.randn(self.height, self.width)*15
 
         return np.array(np.clip(frame*exposure_factor, 0, 255),
                         dtype=np.uint8)
