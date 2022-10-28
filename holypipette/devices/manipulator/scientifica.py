@@ -66,12 +66,15 @@ class Scientifica(Manipulator):
             self.wait_until_still()
 
     def relative_move(self, x, axis):
-        if axis == 1:
-            self.mmc.setRelativeXYPosition('XYStage', x, 0)
-        if axis == 2:
-            self.mmc.setRelativeXYPosition('XYStage', 0, x)
-        if axis == 3:
-            self.mmc.setRelativePosition('ZStage', x)
+        try:
+            if axis == 1:
+                self.mmc.setRelativeXYPosition('XYStage', x, 0)
+            if axis == 2:
+                self.mmc.setRelativeXYPosition('XYStage', 0, x)
+            if axis == 3:
+                self.mmc.setRelativePosition('ZStage', x)
+        except:
+            print(f"COULD NOT MOVE AXIS {axis} to {x}")
 
     def wait_until_still(self, axes = None, axis = None):
         self.mmc.waitForSystem()

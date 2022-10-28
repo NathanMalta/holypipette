@@ -1093,10 +1093,30 @@ class CalibratedStage(CalibratedUnit):
         '''Get a score stating how focused a given image is
         Higher Score == more focused image
         '''
-        img = self.camera.snap()
-        xEdges = cv2.Sobel(src=img, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=3)
-        yEdges = cv2.Sobel(src=img, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=3)
-        return np.sum(np.abs(xEdges)) + np.sum(np.abs(yEdges))
+        scores = []
+        lastImg = 0
+        for i in range(10):
+            start = time.time()
+            while self.camera.lastFrameNum == lastImg:
+                time.sleep(0.001)
+            img = self.camera.get16BitImg()
+            lastImg = self.camera.lastFrameNum
+
+            focusSize = 300
+            x = img.shape[1]/2 - focusSize/2
+            y = img.shape[0]/2 - focusSize/2
+            crop_img = img[int(y):int(y+focusSize), int(x):int(x+focusSize)]
+
+            # xEdges = cv2.norm(cv2.Sobel(src=crop_img, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=7))
+            # yEdges = cv2.norm(cv2.Sobel(src=crop_img, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=7))
+            # score = xEdges ** 2 + yEdges ** 2
+            score = cv2.Laplacian(crop_img, cv2.CV_64F).var()
+
+            scores.append(score)
+            # print(f"{1/(time.time() - start)} sec")
+        
+        print(scores)
+        return np.average(scores)
     
     def autofocusInDirection(self, timeout:int = 15, pastMaxDist:int = 120, movementTol:int = 0.5, movementStep:int = 10) -> tuple[int, List]:
         ''' Move the stage in small increments of movementStep (microns), recording focus score as the stage moves.
@@ -1140,14 +1160,16 @@ class CalibratedStage(CalibratedUnit):
         startPos = self.microscope.position()
         refocusTol = 50 #microns, if final pos is within this tol, focus in the other direction as well.
 
-        for i in [30, 2]:
+        for i in [20, 3]:
             #first try focusing down (negative direction)
-            highestPos, posAndFocus = self.autofocusInDirection(pastMaxDist=10*i, movementStep=-i, timeout=5)
+            highestPos, posAndFocus = self.autofocusInDirection(pastMaxDist=10*i, movementStep=-i, timeout=10)
+            for pt in posAndFocus:
+                print(f"{pt[0]}, {pt[1]}")
 
-            if abs(highestPos - startPos) < refocusTol:
+            # if abs(highestPos - startPos) < refocusTol:
                 #if the final pos is close to our starting pos, we need to refocus in the
                 #other direction: try focusing up (positive direction)
-                highestPos, posAndFocus = self.autofocusInDirection(pastMaxDist=5*i, movementStep=i)
+            highestPos, posAndFocus = self.autofocusInDirection(pastMaxDist=10*i, movementStep=i, timeout=10)
 
         posAndFocus = np.array(posAndFocus)
 

@@ -8,7 +8,7 @@ from holypipette.interface import AutoPatchInterface
 from holypipette.interface.pipettes import PipetteInterface
 from holypipette.gui import PatchGui
 
-from setup_fake_rig import *
+from setup_IBB_rig import *
 
 console_logger()  # Log to the standard console as well
 

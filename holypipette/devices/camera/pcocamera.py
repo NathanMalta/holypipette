@@ -2,6 +2,7 @@
 Camera for a PCO Panda Camera
 '''
 import numpy as np
+import time
 
 from . import *
 import warnings
@@ -18,7 +19,7 @@ __all__ = ['PcoCamera']
 class PcoCamera(Camera):
     PCO_RECORDER_LATEST_IMAGE = 0xFFFFFFFF
 
-    def __init__(self, width=500, height=500):
+    def __init__(self, width=512, height=512):
         super(PcoCamera, self).__init__()
         self.cam = pco.Camera()
         self.cam.record(number_of_images=10, mode='ring buffer') #use "ring buffer" mode for continuous streaming from camera
@@ -29,6 +30,7 @@ class PcoCamera(Camera):
         self.upperBound = 2**16
         self.currExposure = 0
         self.lastFrameNum = 0
+        self.lastFrame = None
         self.start_acquisition()
 
     def set_exposure(self, value):
@@ -51,6 +53,7 @@ class PcoCamera(Camera):
     def reset(self):
         self.cam.close()
         self.cam = pco.Camera()
+        self.cam.sdk.set_binning(2,2)
         self.cam.record(number_of_images=10, mode='ring buffer')
         self.cam.wait_for_first_image()
 
@@ -63,17 +66,38 @@ class PcoCamera(Camera):
         self.lowerBound = img.min()
         self.upperBound = img.max()
 
+    scores = [0] * 25
+    def get16BitImg(self):
+        if self.lastFrameNum == self.cam.rec.get_status()['dwProcImgCount'] and self.lastFrame is not None:
+            return self.lastFrame
+        else:
+            self.lastFrameNum = self.cam.rec.get_status()['dwProcImgCount']
+        
+        try:
+            img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
+            img = img.astype(np.uint16)
+            self.lastFrame = img
+        except:
+            return self.lastFrame #there was an error grabbing the most recent frame
+
+        focusSize = 300
+        x = img.shape[1]/2 - focusSize/2
+        y = img.shape[0]/2 - focusSize/2
+        crop_img = img[int(y):int(y+focusSize), int(x):int(x+focusSize)]
+
+        score = cv2.Laplacian(crop_img, cv2.CV_64F).var()
+        self.scores.append(score)
+        print(np.average(self.scores[-25:]))
+        return img
 
     def raw_snap(self):
         '''
         Returns the current image.
         This is a blocking call (wait until next frame is available)
         '''
-        img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
-        img = img.astype(np.uint16)
-
+        img = self.get16BitImg()
         #apply upper / lower bounds (normalization)
-        img = np.clip(img, self.lowerBound, self.upperBound, dtype=np.float64)
+        # img = np.clip(img, self.lowerBound, self.upperBound, dtype=np.float64)
         span = self.upperBound - self.lowerBound
 
         if span == 0:
