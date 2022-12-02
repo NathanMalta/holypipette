@@ -32,6 +32,7 @@ class PcoCamera(Camera):
         self.lastFrameNum = 0
         self.lastFrame = None
         self.start_acquisition()
+        self.p0 = None
 
     def set_exposure(self, value):
         self.cam.set_exposure_time(value / 1000)
@@ -59,7 +60,7 @@ class PcoCamera(Camera):
 
     def normalize(self, img = None):
         if img is None:
-            img, meta = self.cam.image()
+            img = self.get16BitImg()
 
         #is there a better way to do this?
         #maybe 2 stdevs instead?
@@ -75,21 +76,21 @@ class PcoCamera(Camera):
         
         try:
             img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
-            img = img.astype(np.uint16)
             self.lastFrame = img
         except:
             return self.lastFrame #there was an error grabbing the most recent frame
 
-        focusSize = 300
-        x = img.shape[1]/2 - focusSize/2
-        y = img.shape[0]/2 - focusSize/2
-        crop_img = img[int(y):int(y+focusSize), int(x):int(x+focusSize)]
+        # focusSize = 300
+        # x = img.shape[1]/2 - focusSize/2
+        # y = img.shape[0]/2 - focusSize/2
+        # crop_img = img[int(y):int(y+focusSize), int(x):int(x+focusSize)]
 
-        score = cv2.Laplacian(crop_img, cv2.CV_64F).var()
-        self.scores.append(score)
-        print(np.average(self.scores[-25:]))
+        # score = cv2.Laplacian(crop_img, cv2.CV_64F).var()
+        # self.scores.append(score)
         return img
 
+    opticalPrev = None
+    lastResetTime = 0
     def raw_snap(self):
         '''
         Returns the current image.
@@ -114,4 +115,56 @@ class PcoCamera(Camera):
         if self.width != None and self.height != None:
             img = cv2.resize(img, (self.width, self.height), interpolation= cv2.INTER_LINEAR)
 
+        # #optical flow
+        # if self.opticalPrev is None:
+        #     self.opticalPrev = img
+
+        # # params for ShiTomasi corner detection
+        # feature_params = dict( maxCorners = 100,
+        #                     qualityLevel = 0.5,
+        #                     minDistance = 7,
+        #                     blockSize = 7 )
+        # # Parameters for lucas kanade optical flow
+        # lk_params = dict( winSize  = (30, 30),
+        #                 maxLevel = 5,
+        #                 criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+
+
+        # if self.p0 is None or (time.time() - self.lastResetTime) > 10:
+        #     self.p0 = cv2.goodFeaturesToTrack(img, mask = None, **feature_params).astype(np.float32)
+        #     self.opticalPrev = None
+        #     self.lastResetTime = time.time()
+        
+        # compositeImg = None
+        # if self.opticalPrev is not None:
+        #     p1, st, err = cv2.calcOpticalFlowPyrLK(self.opticalPrev, img, self.p0, None, **lk_params)
+
+        #     # Select good points
+        #     if p1 is not None:
+        #         good_new = p1[st==1]
+        #         good_old = self.p0[st==1]
+        #     # draw the tracks
+        #     if len(good_new) > 0:
+        #         for i, (new, old) in enumerate(zip(good_new, good_old)):
+        #             a, b = new.ravel()
+        #             c, d = old.ravel()
+        #             color = np.random.randint(0, 255, (100, 3))
+
+        #             mask = np.zeros_like(img)
+        #             # mask = cv2.line(mask, (int(a), int(b)), (int(c), int(d)), color[i].tolist(), 2)
+        #             compositeImg = cv2.circle(img, (int(a), int(b)), 2, 255, -1)
+        #         # compositeImg = cv2.add(img, frame)
+            
+        #         self.p0 = good_new.reshape(-1, 1, 2).astype(np.float32)
+            
+        #     print(self.p0[:, 0, 1])
+            
+            # self.opticalPrev = None
+            # self.p0 = None
+        
+        # self.opticalPrev = img
+
+        # if compositeImg is None:
         return img
+        # else:
+        #     return compositeImg

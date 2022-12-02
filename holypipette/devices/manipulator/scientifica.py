@@ -26,6 +26,9 @@ class Scientifica(Manipulator):
         mmc = pymmcore.CMMCore()
         mmc.setDeviceAdapterSearchPaths([mm_dir])
         mmc.loadSystemConfiguration(os.path.join(mm_dir, "scientifica-v001.cfg"))
+        print(f"SCIENTIFICA XY STAGE PROPERTIES: {mmc.getDevicePropertyNames('XYStage')}")
+        print(mmc.getProperty('XYStage', 'Acceleration'), mmc.getProperty('XYStage', 'MaxSpeed'))
+        mmc.setProperty('XYStage', 'Acceleration', 10)
 
         self.mmc = mmc
         self.port_name = name
@@ -58,6 +61,7 @@ class Scientifica(Manipulator):
         if axis == 2:
             self.mmc.setXYPosition('XYStage', self.mmc.getXPosition('XYStage'), x)
         if axis == 3:
+            print("setting z to ", x)
             self.mmc.setPosition('ZStage', x)
 
     def absolute_move_group(self, x, axes):

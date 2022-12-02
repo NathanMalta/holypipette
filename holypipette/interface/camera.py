@@ -53,6 +53,12 @@ class CameraInterface(TaskInterface):
     def increase_exposure(self, increase):
         self.camera.change_exposure(increase)
         self.signal_updated_exposure()
+    
+    @command(category='Camera',
+             description='Normalize the image',
+             )
+    def normalize(self):
+        self.camera.normalize()
 
     @command(category='Camera',
              description='Decrease exposure time by {:.1f}ms',
