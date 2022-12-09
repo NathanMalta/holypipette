@@ -23,15 +23,33 @@ class Scientifica(Manipulator):
     def __init__(self, name = 'COM6'):
         Manipulator.__init__(self)
 
+        #setup python micromanager bindings
         mmc = pymmcore.CMMCore()
         mmc.setDeviceAdapterSearchPaths([mm_dir])
         mmc.loadSystemConfiguration(os.path.join(mm_dir, "scientifica-v001.cfg"))
-        print(f"SCIENTIFICA XY STAGE PROPERTIES: {mmc.getDevicePropertyNames('XYStage')}")
-        print(mmc.getProperty('XYStage', 'Acceleration'), mmc.getProperty('XYStage', 'MaxSpeed'))
-        mmc.setProperty('XYStage', 'Acceleration', 10)
-
         self.mmc = mmc
+
+        print(f"SCIENTIFICA Z STAGE PROPERTIES: {mmc.getDevicePropertyNames('ZStage')}")
+        
+        self.setMaxAccel(100)
+        self.setMaxSpeed(10000)
+
         self.port_name = name
+
+    def setMaxSpeed(self, maxSpeed):
+        '''Sets the max speed for the Scientifica Stage.  
+           Note that even though the device is called 'XYStage', this appears to affect the Z axis as well.
+           It seems like the range for this is around (1000, 100000)
+        '''
+        self.mmc.setProperty('XYStage', 'MaxSpeed', maxSpeed)
+
+    def setMaxAccel(self, maxAccel):
+        '''Sets the max acceleration for the Scientifica Stage.
+           Note that even though the device is called 'XYStage', this appears to affect the Z axis as well
+           It seems like the range for this is around (10, 10000)
+        '''
+        self.mmc.setProperty('XYStage', 'Acceleration', maxAccel)
+
         
     def __del__(self):
         try:
@@ -62,7 +80,12 @@ class Scientifica(Manipulator):
             self.mmc.setXYPosition('XYStage', self.mmc.getXPosition('XYStage'), x)
         if axis == 3:
             print("setting z to ", x)
-            self.mmc.setPosition('ZStage', x)
+            while True:
+                try:
+                    self.mmc.setPosition('ZStage', x)
+                    break
+                except:
+                    time.sleep(0.1)
 
     def absolute_move_group(self, x, axes):
         for i in range(len(axes)):
@@ -70,15 +93,20 @@ class Scientifica(Manipulator):
             self.wait_until_still()
 
     def relative_move(self, x, axis):
-        try:
-            if axis == 1:
-                self.mmc.setRelativeXYPosition('XYStage', x, 0)
-            if axis == 2:
-                self.mmc.setRelativeXYPosition('XYStage', 0, x)
-            if axis == 3:
-                self.mmc.setRelativePosition('ZStage', x)
-        except:
-            print(f"COULD NOT MOVE AXIS {axis} to {x}")
+        while True:
+            try:
+                if axis == 1:
+                    self.mmc.setRelativeXYPosition('XYStage', x, 0)
+                if axis == 2:
+                    self.mmc.setRelativeXYPosition('XYStage', 0, x)
+                if axis == 3:
+                    self.mmc.setRelativePosition('ZStage', x)
+                    break
+            except:
+                print(f"COULD NOT MOVE AXIS {axis} to {x}")
+                # raise Exception(f"COULD NOT MOVE AXIS {axis} to {x}")
+                time.sleep(0.1)
+            
 
     def wait_until_still(self, axes = None, axis = None):
         self.mmc.waitForSystem()

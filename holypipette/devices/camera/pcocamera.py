@@ -67,6 +67,13 @@ class PcoCamera(Camera):
         self.lowerBound = img.min()
         self.upperBound = img.max()
 
+    def getFrameNo(self):
+        return self.cam.rec.get_status()['dwProcImgCount']
+        
+    def get16BitImgRaw(self):
+        img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
+        return img
+
     scores = [0] * 25
     def get16BitImg(self):
         if self.lastFrameNum == self.cam.rec.get_status()['dwProcImgCount'] and self.lastFrame is not None:
@@ -75,7 +82,7 @@ class PcoCamera(Camera):
             self.lastFrameNum = self.cam.rec.get_status()['dwProcImgCount']
         
         try:
-            img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
+            img = self.get16BitImgRaw()
             self.lastFrame = img
         except:
             return self.lastFrame #there was an error grabbing the most recent frame
