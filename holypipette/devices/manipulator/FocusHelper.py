@@ -9,8 +9,8 @@ class FocusHelper():
     '''A helper class to aid with microscope focusing
     '''
     
-    FOCUSING_MAX_SPEED = 100
-    NORMAL_MAX_SPEED = 1000
+    FOCUSING_MAX_SPEED = 1000
+    NORMAL_MAX_SPEED = 10000
 
     def __init__(self, microscope: Microscope, camera: Camera):
         self.microscope : Microscope = microscope
@@ -31,9 +31,14 @@ class FocusHelper():
         focusThread.start()
 
         #wait for the microscope to reach the pos
-        while abs(self.microscope.position() - commandedPos) > 0.1:
-            # print(f'waiting for pos... act: {self.microscope.position()}, cmd: {commandedPos}')
-            time.sleep(0.01)
+        posTimeArr = []
+        currPos = self.microscope.position()
+        while abs(currPos - commandedPos) > 0.3:
+            currPos = self.microscope.position()
+            posTimeArr.append((time.time(), currPos))
+            time.sleep(0.1)
+
+        posTimeArr = np.array(posTimeArr)
 
         #stop the focus recording thread
         focusThread.stop()
@@ -43,10 +48,39 @@ class FocusHelper():
             # print('waiting for thread finish...')
             time.sleep(0.01)
 
+        #find index with best score
         bestIndex = np.argmax(focusThread.posFocusList[:, 1])
-        #print out results
-        bestPos = focusThread.posFocusList[bestIndex][0]
+
+        #find results for that index
+        bestTime = focusThread.posFocusList[bestIndex][2]
         bestScore = focusThread.posFocusList[bestIndex][1]
+
+        #linearly interpolate to find position
+        
+        #find closest time above and below best time
+        dtArr = np.abs(posTimeArr[:, 0] - bestTime)
+
+        #get closest point
+        iclosest = dtArr.argmin()
+        
+        #handle edge case - closest point is at the edge of the array
+        if iclosest == dtArr.shape[0] - 1 or iclosest == 0:
+            return posTimeArr[iclosest][1], bestScore
+
+        #get second closest point
+        secondClosest = min([dtArr[iclosest - 1], dtArr[iclosest + 1]])
+        isecondClosest = iclosest - 1 if dtArr[iclosest - 1] == secondClosest else iclosest + 1
+
+        #determine which is above / below the known point
+        iclosestAbove = iclosest if posTimeArr[iclosest][0] > posTimeArr[isecondClosest][0] else isecondClosest
+        iclosestBelow = iclosest if posTimeArr[iclosest][0] <= posTimeArr[isecondClosest][0] else isecondClosest
+
+        #interpolate based on the values with known positions closest
+        dt = bestTime - posTimeArr[iclosestBelow][0]
+        vel = (posTimeArr[iclosestAbove][1] - posTimeArr[iclosestBelow][1]) / (posTimeArr[iclosestAbove][0] - posTimeArr[iclosestBelow][0])
+        bestPos = posTimeArr[iclosestBelow][1] + vel * dt
+        
+        #return best score, position
         return bestPos, bestScore
 
     def autofocus(self):
@@ -74,7 +108,6 @@ class FocusHelper():
 
 
 class FocusUpdater(Thread):
-
     def __init__(self, microscope : Microscope, camera : Camera):
        Thread.__init__(self)
 
@@ -88,32 +121,17 @@ class FocusUpdater(Thread):
     def run(self):
         '''continuously read frames from camera, and record their focus and the microscope's z position.  Assumes constant velocity!
         '''
-        startTime = time.time()
-        startPos = self.microscope.position()
-
         while self.isRunning:
             while self.lastFrame == self.camera.get_frame_no():
                 time.sleep(0.01) #wait for a new frame to be read from the camera
             self.lastFrame = self.camera.get_frame_no()
-
-            #grab current position
             
             #get focus score from frame
-            img = self.camera.get_16bit_image()
+            _, frametime, _, img = self.camera._last_frame_queue[0]
             score = self._getFocusScore(img)
 
             #append to list
-            self.posFocusList.append([None, score, time.time()])
-        
-        stopTime = time.time()
-        stopPos = self.microscope.position()
-        
-        #now interpolate with time to approximate frame positions
-        vel = (stopPos - startPos) / (stopTime - startTime)
-
-        for i, (_, _, frameTime) in enumerate(self.posFocusList):
-            dt = frameTime - startTime
-            self.posFocusList[i][0] = startPos + dt * vel
+            self.posFocusList.append([None, score, frametime.timestamp()])
         
         self.posFocusList = np.array(self.posFocusList)
         self.didFinish = True #create a flag when we creating the arr
@@ -129,13 +147,12 @@ class FocusUpdater(Thread):
         y = image.shape[0]/2 - focusSize/2
         crop_img = image[int(y):int(y+focusSize), int(x):int(x+focusSize)]
 
-        start = time.time()
         xEdges = cv2.norm(cv2.Sobel(src=crop_img, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=7))
         yEdges = cv2.norm(cv2.Sobel(src=crop_img, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=7))
         score = xEdges ** 2 + yEdges ** 2
-        # score = cv2.Laplacian(crop_img, cv2.CV_64F).var()
+        # score = cv2.Laplacian(crop_img, cv2.CV_32F).var()
         
-        return score
+        return xEdges
 
 
     def stop(self):

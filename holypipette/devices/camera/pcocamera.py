@@ -31,12 +31,16 @@ class PcoCamera(Camera):
 
         #setup the pco camera for continuous streaming
         self.cam = pco.Camera()
+        # self.cam.sdk.set_timestamp_mode('binary & ascii')
         self.cam.record(number_of_images=10, mode='ring buffer') #use "ring buffer" mode for continuous streaming from camera
         self.cam.wait_for_first_image()
 
-        self.lastFrame = None
+        self.frameno = None
 
         self.currExposure = 0
+
+        self.upperBound = 255
+        self.lowerBound = 0
 
         self.start_acquisition() #start thread that updates camera gui
 
@@ -60,7 +64,17 @@ class PcoCamera(Camera):
     def reset(self):
         self.cam.close()
         self.cam = pco.Camera()
-        self.cam.sdk.set_binning(2,2)
+        
+        config = {'exposure time': 10e-3,
+                    'roi': (0, 0, 1024, 1024),
+                    'timestamp': 'ascii',
+                    'pixel rate': 500_000_000,
+                    'trigger': 'auto sequence',
+                    'acquire': 'auto',
+                    'metadata': 'on',
+                    'binning': (2, 2)}
+        self.cam.configuration(config)
+
         self.cam.record(number_of_images=10, mode='ring buffer')
         self.cam.wait_for_first_image()
 
@@ -74,7 +88,7 @@ class PcoCamera(Camera):
         self.upperBound = img.max()
 
     def get_frame_no(self):
-        return self.cam.rec.get_status()['dwProcImgCount']
+        return self.frameno
         
     def get_16bit_image(self):
         '''get a 16 bit color image from the camera (no normalization)
@@ -88,6 +102,7 @@ class PcoCamera(Camera):
         try:
             img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
             self.lastFrame = img
+            # print(meta)
         except:
             return self.lastFrame #there was an error grabbing the most recent frame
 

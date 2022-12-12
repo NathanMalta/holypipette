@@ -31,8 +31,8 @@ class Scientifica(Manipulator):
 
         print(f"SCIENTIFICA Z STAGE PROPERTIES: {mmc.getDevicePropertyNames('ZStage')}")
         
-        self.setMaxAccel(100)
-        self.setMaxSpeed(10000)
+        self.set_max_accel(100)
+        self.set_max_speed(10000)
 
         self.port_name = name
 
@@ -118,7 +118,8 @@ class Scientifica(Manipulator):
 
 if __name__ == '__main__':
     prior = Scientifica()
-    print(prior.position(axis = 1))
-    #prior.relative_move(50,axis =1)
-    #prior.wait_until_still()
-    print(prior.position(axis=1))
+    for i in range(100):
+        start = time.time()
+        pos = prior.position(3)
+        end = time.time()
+        print(pos, end-start)
