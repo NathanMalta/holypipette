@@ -46,8 +46,6 @@ class SensapexManip(Manipulator):
         newPos[axis-1] = x
         self.ump.goto_pos(self.deviceID, newPos, 100, max_acceleration=20)
 
-
-
     def position_group(self, axes):
         '''
         Current position along a group of axes.

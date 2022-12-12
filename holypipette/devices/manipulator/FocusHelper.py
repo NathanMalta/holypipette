@@ -2,19 +2,24 @@ import time
 import cv2
 import numpy as np
 from holypipette.devices.manipulator.microscope import Microscope
-from holypipette.devices.camera import pcocamera
+from holypipette.devices.camera import Camera
 from threading import Thread
 
 class FocusHelper():
     '''A helper class to aid with microscope focusing
     '''
     
-    def __init__(self, microscope: Microscope, camera: pcocamera):
+    FOCUSING_MAX_SPEED = 100
+    NORMAL_MAX_SPEED = 1000
+
+    def __init__(self, microscope: Microscope, camera: Camera):
         self.microscope : Microscope = microscope
-        self.camera : pcocamera = camera
+        self.camera : Camera = camera
 
     def autofocusContinuous(self, distance):
-        '''
+        '''tell the stage to go a certain (larger) distance at a low max speed.
+           Take a bunch of pictures and determine focus score.  Finally,
+           move the stage to the position with the best focus score 
         '''
 
         #move the microscope a certain distance forward
@@ -27,7 +32,7 @@ class FocusHelper():
 
         #wait for the microscope to reach the pos
         while abs(self.microscope.position() - commandedPos) > 0.1:
-            print('waiting for pos...')
+            # print(f'waiting for pos... act: {self.microscope.position()}, cmd: {commandedPos}')
             time.sleep(0.01)
 
         #stop the focus recording thread
@@ -35,83 +40,50 @@ class FocusHelper():
 
         #wait for focus thread to stop
         while not focusThread.didFinish:
-            print('waiting for finish...')
+            # print('waiting for thread finish...')
             time.sleep(0.01)
 
         bestIndex = np.argmax(focusThread.posFocusList[:, 1])
         #print out results
         bestPos = focusThread.posFocusList[bestIndex][0]
-        self.microscope.absolute_move(bestPos)
-    
-    def autofocusInDirection(self, timeout:int = 15, pastMaxDist:int = 120, movementTol:int = 0.5, movementStep:int = 10) -> tuple[int, list]:
-        ''' Move the stage in small increments of movementStep (microns), recording focus score as the stage moves.
-        Terminate once we move the stage pastMaxDist (microns) past it's highest value or after timeout (seconds).
-        '''
-
-        #initialize relevant vars
-        self.microscope.relative_move(-1)
-        highestScore = self._getFocusScore() #the highest focus score we've seen
-        highestPos = self.microscope.position() #the micrscope pos of the highest focus score
-        posAndFocus = []
-        commandedPos = self.microscope.position() #position setpoint
-        
-        startTime = time.time()
-        while (time.time() - startTime < timeout) and abs(highestPos - self.microscope.position()) < pastMaxDist:
-            if abs(commandedPos - self.microscope.position()) < movementTol:
-                #only send a new movement command if the last one was reached
-                commandedPos = self.microscope.position() + movementStep
-                self.microscope.absolute_move(commandedPos)
-
-            currScore = self._getFocusScore()
-            currPos = self.microscope.position()
-            posAndFocus.append([currPos, currScore])
-            if currScore > highestScore:
-                highestScore = currScore
-                highestPos = currPos
-            
-        #move to place with the highest score (most focused)
-        self.microscope.absolute_move(highestPos)
-        print(f"moving to z to: {highestPos}")
-        
-        #wait until we reach most focused point
-        while abs(self.microscope.position() - highestPos) > movementTol and time.time() - startTime < timeout:
-            time.sleep(0.01)
-        
-        return highestPos, posAndFocus
+        bestScore = focusThread.posFocusList[bestIndex][1]
+        return bestPos, bestScore
 
     def autofocus(self):
         '''Attempts to auto focus the micrscope image by moving in the z-axis
         '''
-        self.autofocusContinuous(500)
-        return
 
-        startPos = self.microscope.position()
-        refocusTol = 100 #microns, if final pos is within this tol, focus in the other direction as well.
+        self.microscope.set_max_speed(self.FOCUSING_MAX_SPEED)
+        initPos = self.microscope.position()
+        bestForwardPos, bestForwardScore = self.autofocusContinuous(500)
+        
+        self.microscope.set_max_speed(self.NORMAL_MAX_SPEED)
+        self.microscope.absolute_move(initPos)
+        self.microscope.wait_until_still()
+        self.microscope.set_max_speed(self.FOCUSING_MAX_SPEED)
 
-        for i in [500, 5]:
-            #first try focusing down (negative direction)
-            highestPos, posAndFocus = self.autofocusInDirection(pastMaxDist=2*i, movementStep=-i, timeout=10)
-            # for pt in posAndFocus:
-                # print(f"{pt[0]}, {pt[1]}")
+        bestBackwardPos, bestBackwardScore = self.autofocusContinuous(-500)
+        self.microscope.set_max_speed(self.NORMAL_MAX_SPEED)
 
-            if abs(highestPos - startPos) < refocusTol:
-                #if the final pos is close to our starting pos, we need to refocus in the
-                #other direction: try focusing up (positive direction)
-                highestPos, posAndFocus = self.autofocusInDirection(pastMaxDist=1*i, movementStep=i, timeout=10)
+        if bestBackwardScore < bestForwardScore:
+            self.microscope.absolute_move(bestForwardPos)
+        else:
+            self.microscope.absolute_move(bestBackwardPos)
 
-        posAndFocus = np.array(posAndFocus)
+
 
 
 class FocusUpdater(Thread):
 
-    def __init__(self, microscope, camera):
+    def __init__(self, microscope : Microscope, camera : Camera):
        Thread.__init__(self)
-       self.isRunning = True
-       self.camera = camera
-       self.microscope = microscope
-       self.lastFrame = 0
-       self.posFocusList = []
-       self.didFinish = False
+
+       self.isRunning : bool = True
+       self.camera : Camera = camera
+       self.microscope : Microscope = microscope
+       self.lastFrame : int = 0
+       self.posFocusList : list = []
+       self.didFinish : bool = False
 
     def run(self):
         '''continuously read frames from camera, and record their focus and the microscope's z position.  Assumes constant velocity!
@@ -120,14 +92,14 @@ class FocusUpdater(Thread):
         startPos = self.microscope.position()
 
         while self.isRunning:
-            while self.lastFrame == self.camera.getFrameNo():
+            while self.lastFrame == self.camera.get_frame_no():
                 time.sleep(0.01) #wait for a new frame to be read from the camera
-            self.lastFrame = self.camera.getFrameNo()
+            self.lastFrame = self.camera.get_frame_no()
 
             #grab current position
             
             #get focus score from frame
-            img = self.camera.get16BitImgRaw()
+            img = self.camera.get_16bit_image()
             score = self._getFocusScore(img)
 
             #append to list
@@ -152,11 +124,12 @@ class FocusUpdater(Thread):
         Higher Score == more focused image
         '''
 
-        focusSize = 1024
+        focusSize = 512
         x = image.shape[1]/2 - focusSize/2
         y = image.shape[0]/2 - focusSize/2
         crop_img = image[int(y):int(y+focusSize), int(x):int(x+focusSize)]
 
+        start = time.time()
         xEdges = cv2.norm(cv2.Sobel(src=crop_img, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=7))
         yEdges = cv2.norm(cv2.Sobel(src=crop_img, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=7))
         score = xEdges ** 2 + yEdges ** 2

@@ -36,19 +36,19 @@ class Scientifica(Manipulator):
 
         self.port_name = name
 
-    def setMaxSpeed(self, maxSpeed):
+    def set_max_speed(self, speed):
         '''Sets the max speed for the Scientifica Stage.  
            Note that even though the device is called 'XYStage', this appears to affect the Z axis as well.
            It seems like the range for this is around (1000, 100000)
         '''
-        self.mmc.setProperty('XYStage', 'MaxSpeed', maxSpeed)
+        self.mmc.setProperty('XYStage', 'MaxSpeed', speed)
 
-    def setMaxAccel(self, maxAccel):
+    def set_max_accel(self, accel):
         '''Sets the max acceleration for the Scientifica Stage.
            Note that even though the device is called 'XYStage', this appears to affect the Z axis as well
            It seems like the range for this is around (10, 10000)
         '''
-        self.mmc.setProperty('XYStage', 'Acceleration', maxAccel)
+        self.mmc.setProperty('XYStage', 'Acceleration', accel)
 
         
     def __del__(self):

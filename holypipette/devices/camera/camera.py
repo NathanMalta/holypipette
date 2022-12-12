@@ -203,6 +203,12 @@ class Camera(object):
     def raw_snap(self):
         return None
 
+    def get_16bit_image(self):
+        '''
+        Returns the current image as a 16-bit color image
+        '''
+        return None
+
     def last_frame(self):
         '''
         Get the last snapped frame and its number
@@ -254,26 +260,8 @@ class Camera(object):
     def reset(self):
         pass
 
-
-class FakeParamecium(object):
-    def __init__(self):
-        self.position = np.array([0., 0., 0.])
-        self.center = np.array([0., 0., 0.])
-        self.velocity = 200  # um per second
-        self.sigma = 1
-        self._last_update = time.time()
-        self.angle = 0
-
-    def update_position(self):
-        dt = time.time() - self._last_update
-        self._last_update = time.time()
-        to_center = np.arctan2(self.position[1], self.position[0])
-        bias = (self.position[0]**2 + self.position[1]**2)/20000  # bias is quadratic function of distance
-        angle = self.angle + dt*(self.sigma*np.random.randn() +
-                                 bias*((to_center - self.angle + np.pi) % (2*np.pi) - np.pi))
-        self.angle = (angle + np.pi) % (2*np.pi) - np.pi
-        self.position += self.velocity*dt*np.array([np.cos(self.angle), np.sin(self.angle), 0.0])
-
+    def get_frame_no(self):
+        raise NotImplementedError('get_frame_no not implemented for this camera')
 
 class FakeCamera(Camera):
     def __init__(self, manipulator=None, image_z=0, paramecium=False):
@@ -285,10 +273,6 @@ class FakeCamera(Camera):
         self.image_z = image_z
         self.scale_factor = .5  # micrometers in pixels
         self.depth_of_field = 2.
-        if paramecium:
-            self.paramecium = FakeParamecium()
-        else:
-            self.paramecium = None
         self.frame = np.array(np.clip(gaussian_filter(np.random.randn(self.width * 2, self.height * 2)*0.5, 10)*50 + 128, 0, 255), dtype=np.uint8)
         
         self.start_acquisition()

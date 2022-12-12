@@ -28,13 +28,16 @@ class Microscope(Manipulator):
         axis : axis index
         '''
         Manipulator.__init__(self)
-        self.dev = dev
+        self.dev : Manipulator = dev
         self.axis = axis
         self.up_direction = None # Up direction, must be provided or calculated
         self.floor_Z = None # This is the Z coordinate of the coverslip
         # Motor range in um; by default +- one meter
         self.min = -1e6 # This could replace floor_Z
         self.max = 1e6
+
+    def set_max_speed(self, speed):
+        self.dev.set_max_speed(speed)
 
     def position(self):
         '''
