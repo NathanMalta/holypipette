@@ -18,7 +18,7 @@ mmc.setPosition("ZStage", stage_z + 500)
 # Continuously take position measurements for 5 seconds
 start_time = time.time()
 timePosArr = []
-while time.time() - start_time < 5:
+while time.time() - start_time < 10:
     stage_z = mmc.getPosition("ZStage")
     timePosArr.append([time.time() - start_time, stage_z])
 

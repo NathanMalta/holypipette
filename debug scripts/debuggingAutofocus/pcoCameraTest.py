@@ -4,6 +4,15 @@ import time
 PCO_RECORDER_LATEST_IMAGE = 0xFFFFFFFF
 
 cam = pco.Camera()
+config = {'exposure time': 10e-3,
+            'roi': (1, 1, 1024, 1024),
+            'timestamp': 'off',
+            'trigger': 'auto sequence',
+            'acquire': 'auto',
+            'metadata': 'on',
+            'binning': (2, 2)}
+cam.configuration = config
+
 cam.record(number_of_images=10, mode='ring buffer') #use "ring buffer" mode for continuous streaming from camera
 cam.wait_for_first_image()
 
