@@ -52,33 +52,8 @@ class FocusHelper():
         bestIndex = np.argmax(focusThread.posFocusList[:, 1])
 
         #find results for that index
-        bestTime = focusThread.posFocusList[bestIndex][2]
         bestScore = focusThread.posFocusList[bestIndex][1]
-
-        #linearly interpolate to find position
-        
-        #find closest time above and below best time
-        dtArr = np.abs(posTimeArr[:, 0] - bestTime)
-
-        #get closest point
-        iclosest = dtArr.argmin()
-        
-        #handle edge case - closest point is at the edge of the array
-        if iclosest == dtArr.shape[0] - 1 or iclosest == 0:
-            return posTimeArr[iclosest][1], bestScore
-
-        #get second closest point
-        secondClosest = min([dtArr[iclosest - 1], dtArr[iclosest + 1]])
-        isecondClosest = iclosest - 1 if dtArr[iclosest - 1] == secondClosest else iclosest + 1
-
-        #determine which is above / below the known point
-        iclosestAbove = iclosest if posTimeArr[iclosest][0] > posTimeArr[isecondClosest][0] else isecondClosest
-        iclosestBelow = iclosest if posTimeArr[iclosest][0] <= posTimeArr[isecondClosest][0] else isecondClosest
-
-        #interpolate based on the values with known positions closest
-        dt = bestTime - posTimeArr[iclosestBelow][0]
-        vel = (posTimeArr[iclosestAbove][1] - posTimeArr[iclosestBelow][1]) / (posTimeArr[iclosestAbove][0] - posTimeArr[iclosestBelow][0])
-        bestPos = posTimeArr[iclosestBelow][1] + vel * dt
+        bestPos = focusThread.posFocusList[bestIndex][0]
         
         #return best score, position
         return bestPos, bestScore
@@ -104,9 +79,6 @@ class FocusHelper():
         else:
             self.microscope.absolute_move(bestBackwardPos)
 
-
-
-
 class FocusUpdater(Thread):
     def __init__(self, microscope : Microscope, camera : Camera):
        Thread.__init__(self)
@@ -131,7 +103,7 @@ class FocusUpdater(Thread):
             score = self._getFocusScore(img)
 
             #append to list
-            self.posFocusList.append([None, score, frametime.timestamp()])
+            self.posFocusList.append([self.microscope.position(), score])
         
         self.posFocusList = np.array(self.posFocusList)
         self.didFinish = True #create a flag when we creating the arr

@@ -32,6 +32,15 @@ class PcoCamera(Camera):
         #setup the pco camera for continuous streaming
         self.cam = pco.Camera()
         # self.cam.sdk.set_timestamp_mode('binary & ascii')
+        config = {'exposure time': 10e-3,
+                    'roi': (1, 1, 1024, 1024),
+                    'timestamp': 'off',
+                    'trigger': 'auto sequence',
+                    'acquire': 'auto',
+                    'metadata': 'on',
+                    'binning': (2, 2)}
+        self.cam.configuration = config
+
         self.cam.record(number_of_images=10, mode='ring buffer') #use "ring buffer" mode for continuous streaming from camera
         self.cam.wait_for_first_image()
 
@@ -41,6 +50,8 @@ class PcoCamera(Camera):
 
         self.upperBound = 255
         self.lowerBound = 0
+
+        self.normalize() #normalize image on startup
 
         self.start_acquisition() #start thread that updates camera gui
 
@@ -67,13 +78,13 @@ class PcoCamera(Camera):
         
         config = {'exposure time': 10e-3,
                     'roi': (0, 0, 1024, 1024),
-                    'timestamp': 'ascii',
+                    'timestamp': 'off',
                     'pixel rate': 500_000_000,
                     'trigger': 'auto sequence',
                     'acquire': 'auto',
                     'metadata': 'on',
                     'binning': (2, 2)}
-        self.cam.configuration(config)
+        self.cam.configuration = config
 
         self.cam.record(number_of_images=10, mode='ring buffer')
         self.cam.wait_for_first_image()
@@ -94,10 +105,10 @@ class PcoCamera(Camera):
         '''get a 16 bit color image from the camera (no normalization)
            this compares to raw_snap which returns a 8 bit image with normalization
         '''
-        if self.frameno == self.cam.rec.get_status()['dwProcImgCount'] and self.lastFrame is not None:
-            return self.lastFrame
-        else:
-            self.frameno = self.cam.rec.get_status()['dwProcImgCount']
+        # if self.frameno == self.cam.rec.get_status()['dwProcImgCount'] and self.lastFrame is not None:
+        #     return self.lastFrame
+        # else:
+        self.frameno = self.cam.rec.get_status()['dwProcImgCount']
         
         try:
             img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
