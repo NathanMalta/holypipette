@@ -31,13 +31,13 @@ class FakeManipulator(Manipulator):
         self.angle = angle*pi/180
 
         #continuous movement values
-        self.max_speed = 1000. # um/s
+        self.set_max_speed(10000)
         self.setpoint = self.x.copy()
         self.speeds = zeros(6)
         self.cmd_time = [None] * 6
 
     def set_max_speed(self, speed : int):
-        self.max_speed = speed
+        self.max_speed = speed / 1000 * 82 #for some reason, when you specify 1000 as the max speed, it actually moves at 82 um/s
 
     def position(self, axis):
         '''
