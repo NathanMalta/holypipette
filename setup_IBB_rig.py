@@ -21,7 +21,7 @@ microscope.up_direction = 1.0
 
 units = [ManipulatorUnit(sensapexController, [1, 2, 3])]
 
-amplifier = MultiClampChannel(channel=2)
+amplifier = MultiClampChannel(channel=1)
 
 pressureSerial = Serial(port='COM15', baudrate=9600, timeout=3)
 pressure = IBBPressureController(channel=1, arduinoSerial=pressureSerial)
