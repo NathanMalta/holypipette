@@ -5,6 +5,7 @@ It is essentially a subset of a Manipulator
 from __future__ import absolute_import
 
 from numpy import ones, arange
+import numpy as np
 
 from .manipulator import Manipulator
 
@@ -63,7 +64,7 @@ class ManipulatorUnit(Manipulator):
         self.sleep(.05)
 
     def absolute_move_group(self, x, axes):
-        self.dev.absolute_move_group(x, self.axes[axes])
+        self.dev.absolute_move_group(x, np.array(self.axes)[axes])
         self.sleep(.05)
 
     def relative_move(self, x, axis = None):
@@ -92,32 +93,6 @@ class ManipulatorUnit(Manipulator):
         else:
             self.dev.stop(self.axes[axis])
 
-    def motor_ranges(self):
-        """
-        Runs the motors to calculate ranges of the motors.
-
-        DOESN'T WORK! DO NOT USE!
-        """
-        return
-        dx = ones(len(self.axes)) * 1000000. # (1 meter; should more than any platform)
-        self.relative_move(-dx)
-        self.wait_until_still()
-        self.min = self.position()
-        self.relative_move(dx)
-        self.wait_until_still()
-        self.max = self.position()
-
-    def is_accessible(self, x, axis = None):
-        """
-        Checks whether position x is accessible.
-
-        THIS METHOD IS INCORRECT.
-        """
-        if axis is None:
-            return all([self.is_accessible(x[i]) for i in range(self.axes)])
-        else:
-            return (x>=min) and (x<=max) # This is clearly wrong!
-
     def wait_until_still(self, axes = None):
         """
         Waits for the motors to stop.
@@ -144,3 +119,9 @@ class ManipulatorUnit(Manipulator):
         timeout : time out in second
         """
         self.dev.wait_until_reached(position, axes, precision, timeout)
+
+    def set_max_speed(self, speed):
+        self.dev.set_max_speed(speed)
+    
+    def set_max_accel(self, accel):
+        self.dev.set_max_speed(accel)

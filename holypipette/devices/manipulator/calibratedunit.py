@@ -22,7 +22,7 @@ from holypipette.devices.manipulator import *
 from numpy.linalg import inv, pinv, norm
 from holypipette.vision import *
 from threading import Thread
-from .FocusHelper import FocusHelper
+from .FocusHelper import FocusHelper, StageCalHelper
 
 __all__ = ['CalibratedUnit', 'CalibrationError', 'CalibratedStage']
 
@@ -50,11 +50,9 @@ class CalibrationConfig(Config):
     pause_in_stack = NumberWithUnit(0.3, unit='s',
                                 doc='Pause between pictures of a z-stack',
                                 bounds=(0, 2))
-    stage_refine_steps = Number(2, doc='Number of refinement steps for stage calibration',
-                               bounds=(0, 20))
     categories = [('Calibration', ['sleep_time', 'position_tolerance',
                                    'stack_depth', 'calibration_moves', 'equalize_axes', 'pause_in_stack',
-                                   'stage_refine_steps']),
+                                   ]),
                   ('Display', ['position_update'])]
 
 
@@ -115,11 +113,9 @@ class CalibratedUnit(ManipulatorUnit):
         self.photo_x0 = None
         self.photo_y0 = None
 
-        self.focusHelper = FocusHelper(microscope, camera)
-
         # Matrices for passing to the camera/microscope system
-        self.M = zeros((3,len(unit.axes))) # unit to camera
-        self.Minv = zeros((len(unit.axes),3)) # Inverse of M, when well defined (otherwise pseudoinverse? pinv)
+        self.M = zeros((3,len(unit.axes))) # stage units (in micron) to camera
+        self.Minv = zeros((len(unit.axes),3)) # Inverse of M
         self.r0 = zeros(3) # Offset in reference system
 
         # Dictionary of objectives and conditions (immersed/non immersed)
@@ -364,12 +360,12 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         # Objective magnification
         print("Magnification for each axis of the pipette: "+str(self.pixel_per_um()[:2]))
-        pixel_per_um = self.stage.pixel_per_um()[0]
+        pixel_per_um = self.pixel_per_um(M=self.M)[0]
         print("Magnification for each axis of the stage: "+str(pixel_per_um))
         print("Field size: "+str(self.camera.width/pixel_per_um)+" µm x "+str(self.camera.height/pixel_per_um)+' µm')
         # Pipette vs. stage (for each axis, mvt should correspond to 1 um)
         for axis in range(len(self.axes)):
-            compensating_move = -dot(self.stage.Minv,self.M[:,axis])
+            compensating_move = -dot(self.Minv,self.M[:,axis])
             length = (sum(compensating_move[:2]**2)+self.M[2,axis]**2)**.5
             print("Precision of axis "+str(axis)+": "+str(abs(1-length)))
             # Angles
@@ -1053,6 +1049,10 @@ class CalibratedStage(CalibratedUnit):
         CalibratedUnit.__init__(self, unit, stage, microscope, camera,
                                 config=config)
         self.saved_state_question = 'Move stage back to initial position?'
+
+        self.focusHelper = FocusHelper(microscope, camera)
+        self.stageCalHelper = StageCalHelper(unit, camera)
+
         # It should be an XY stage, ie, two axes
         if len(self.axes) != 2:
             raise CalibrationError('The unit should have exactly two axes for horizontal calibration.')
@@ -1105,159 +1105,15 @@ class CalibratedStage(CalibratedUnit):
         self.info('Preparing stage calibration')
         self.info("auto focusing microscope...")
         self.focusHelper.autofocus()
+        self.info("Finished focusing.")
 
-        return
-        # Take a photo of the pipette or coverslip
-        template = crop_center(self.camera.snap(), ratio=64)
-
-        # Calculate the location of the template in the image
-        self.sleep(self.config.sleep_time)
-        image = self.camera.snap()
-        x0, y0, _ = templatematching(image, template)
-        previousx, previousy = x0, y0
-
-        M = zeros((3, len(self.axes)))
-
-        # Store current position
-        u0 = self.position()
-        self.info('Small movements for each axis')
-        # 1) Move each axis by a small displacement (40 um)
-        distance = 40. # in um
-        for axis in range(len(self.axes)):  # normally just two axes
-            self.abort_if_requested()
-            self.relative_move(distance, axis) # there could be a keyword blocking = True
-            self.wait_until_still(axis)
-            self.sleep(self.config.sleep_time)
-            self.abort_if_requested()
-            image = self.camera.snap()
-            x, y, _ = templatematching(image, template)
-            self.debug('Camera x,y =' + str(x - previousx) + ',' + str(y - previousy))
-
-            # 2) Compute the matrix from unit to camera (first in pixels)
-            M[:,axis] = array([x-previousx, y-previousy, 0])/distance
-            self.debug('Matrix column:' + str(M[:, axis]))
-            previousx, previousy = x, y # this is the position before the next move
-
-        # Equalize axes (same displacement in each direction); for the movement it's not done
-        if self.config.equalize_axes:
-            M = self.equalize_matrix(M)
-
-        # Compute the (pseudo-)inverse
-        self.M = M
-        Minv = pinv(M)
-        # Offset is such that the initial position is zero in the reference system
-        r0 = -dot(M, u0)
-
-        # Store the results
-        self.Minv = Minv
-        self.r0 = r0
+        # use LK optical flow to determine transformation matrix
+        self.M = self.stageCalHelper.calibrate().T
+        self.Minv = pinv(self.M)
         self.calibrated = True
 
-        self.info('Large displacements')
-        # More accurate calibration:
-        # 3) Move to three corners using the computed matrix
-        scale = 0.9  # This is to avoid the black corners
-        width, height = int(self.camera.width * scale), int(self.camera.height * scale)
-        theight, twidth = template.shape  # template dimensions
-        # List of corners, reference coordinates
-        # We use a margin of 1/4 of the template
-        rtarget = [array([-(width / 2 - twidth * 3. / 4), -(height / 2 - theight * 3. / 4)]),
-                   array([(width / 2 - twidth * 3. / 4), -(height / 2 - theight * 3. / 4)]),
-                   array([-(width / 2 - twidth * 3. / 4), (height / 2 - theight * 3. / 4)])]
-
-
-        best_error = 1e6
-        best_M, best_Minv = M, Minv
-        for _ in range(int(self.config.stage_refine_steps)+1):
-            self.info('Moving back')
-
-            # Move back
-            self.absolute_move(u0)
-            self.wait_until_still()
-            self.sleep(self.config.sleep_time)
-
-            # Fix any residual error (due to motor unreliability)
-            image = self.camera.snap()
-            x, y, _ = templatematching(image, template)
-            self.debug('Camera x,y =' + str(x - x0) + ',' + str(y - y0))
-
-            # Recenter
-            self.reference_relative_move(-array([x - x0, y - y0]))
-            self.wait_until_still()
-            u0 = self.position()
-            self.r0 = -dot(M, u0)
-
-            u = []
-            r = []
-            for ri in rtarget:
-                self.abort_if_requested()
-                self.reference_move(ri)
-                self.wait_until_still()
-                self.sleep(self.config.sleep_time)
-                image = self.camera.snap()
-                # Template matching could be reduced to the expected region
-                x, y, _ = templatematching(image, template)
-                # Error calculation
-                self.debug('Camera x,y = {},{}'.format(x - x0,y - y0))
-                r.append(array([x-x0,y-y0]))
-                u.append(self.position())
-            # Error
-            quadratic_error = array([(rtarget[i] - r[i])**2 for i in range(3)]).mean()
-            self.debug('Error = {} pixels'.format(quadratic_error**.5))
-
-            # Is it better than previously?
-            if quadratic_error<best_error:
-                best_error = quadratic_error
-                best_M, best_Minv = M, Minv
-
-            rx = r[1]-r[0]
-            ry = r[2]-r[0]
-            r = vstack((rx,ry)).T
-            ux = u[1]-u[0]
-            uy = u[2]-u[0]
-            u = vstack((ux,uy)).T
-            self.debug('r: '+str(r))
-            self.debug('u: '+str(u))
-            M[:2, :] = dot(r, inv(u))
-            if self.config.equalize_axes:
-                M = self.equalize_matrix(M)
-            self.debug('Matrix: ' + str(M))
-
-            # 4) Recompute the matrix and the (pseudo) inverse
-            Minv = pinv(M)
-
-            # 5) Calculate conversion factor.
-
-            # 6) Offset is such that the initial position is zero in the reference system
-            r0 = -dot(M, u0)
-
-            # Store results
-            self.M = M
-            self.Minv = Minv
-            self.r0 = r0
-
-        # Select the best one
-        if (int(self.config.stage_refine_steps)>0):
-            self.M = best_M
-            self.Minf = best_Minv
-
-        # Move back and recenter
-        self.info('Moving back')
-        self.absolute_move(u0)
-        self.wait_until_still()
-        self.sleep(self.config.sleep_time)
-
-        image = self.camera.snap()
-        x, y, _ = templatematching(image, template)
-        self.debug('Camera x,y =' + str(x - x0) + ',' + str(y - y0))
-
-        self.reference_relative_move(-array([x-x0, y-y0]))
-        self.r0 = -dot(M, u0)
-
         self.info('Stage calibration done')
-        if (int(self.config.stage_refine_steps)>0): # otherwise it's not measurable
-            self.info('Error = {} pixels = {} %'.format(best_error**.5,
-                                                        100*(best_error**.5)/max([width,height])))
+        # self.analyze_calibration()
 
     def mosaic(self, width = None, height = None):
         '''

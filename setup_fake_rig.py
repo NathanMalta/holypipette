@@ -12,8 +12,8 @@ controller = FakeManipulator(min=[-4096, -4096, -3000, -4096, -4096, -2000],
                              max=[4096, 4096, 1000, 4096, 4096, 2000])
 stage = ManipulatorUnit(controller, [4, 5])
 
-controller.x[:3] = [-50, 10, 500]
-controller.x[5] = 400
+controller.x[:3] = [1000, 300, 200] # start with pipette in frame
+controller.x[5] = 400 # start with stage out of focus
 camera = FakeCalCamera(manipulator=controller, image_z=0, paramecium=True)
 microscope = Microscope(controller, 6)
 microscope.floor_Z = 0
