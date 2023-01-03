@@ -19,6 +19,9 @@ class SensapexManip(Manipulator):
         else:
             self.deviceID = deviceID
 
+        self.max_speed = 100 # "feels good" default value
+        self.max_acceleration = 20 # "feels good" default value
+
     def position(self, axis):
         '''
         Current position along an axis.
@@ -44,7 +47,22 @@ class SensapexManip(Manipulator):
         '''
         newPos = np.empty((3,)) * np.nan
         newPos[axis-1] = x
-        self.ump.goto_pos(self.deviceID, newPos, 100, max_acceleration=20)
+        self.ump.goto_pos(self.deviceID, newPos, self.max_speed, max_acceleration=self.max_acceleration)
+
+    def absolute_move_group(self, x, axes):
+        '''
+        Moves the device group of axes to position x.
+
+        Parameters
+        ----------
+        axes : list of axis numbers
+        x : target position in um (vector or list).
+        '''
+        newPos = np.empty((3,)) * np.nan
+        for i, pos, axis in enumerate(zip(x, axes)):
+            newPos[axis-1] = pos
+        self.ump.goto_pos(self.deviceID, newPos, self.max_speed, max_acceleration=self.max_acceleration)
+        
 
     def position_group(self, axes):
         '''
@@ -65,3 +83,9 @@ class SensapexManip(Manipulator):
         Stops current movements.
         """
         self.ump.stop()
+
+    def set_max_speed(self, speed):
+        self.max_speed = speed
+    
+    def set_max_accel(self, accel):
+        self.max_acceleration = accel

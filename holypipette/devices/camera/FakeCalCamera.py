@@ -8,7 +8,7 @@ import time
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 
 class FakeCalCamera(Camera):
-    def __init__(self, manipulator=None, image_z=0, paramecium=False):
+    def __init__(self, manipulator=None, image_z=0, targetFramerate=40):
         super(FakeCalCamera, self).__init__()
         self.width : int = 1024
         self.height : int = 1024
@@ -18,6 +18,7 @@ class FakeCalCamera(Camera):
         self.pixels_per_micron : float = .25  # pixels / micrometers
         self.frameno : int = 0
         self.pipette = FakePipette(self.manipulator, self.pixels_per_micron)
+        self.targetFramerate = 40
 
         #create checkerboard pattern on smaller image
         # self.frame = np.zeros((self.width // 20, self.height // 20), dtype=np.uint16)#np.array(np.clip((np.random.randn(self.width * 2, self.height * 2)*0.5)*50 + 128, 0, 255), dtype=np.uint8)
@@ -31,6 +32,13 @@ class FakeCalCamera(Camera):
         self.frame = cv2.imread(curFile + "/FakeMicroscopeImgs/background.tif", cv2.IMREAD_GRAYSCALE)
         self.frame = cv2.resize(self.frame, dsize=(self.width * 2, self.height * 2), interpolation=cv2.INTER_NEAREST)
 
+        self.last_img = None
+        self.last_stage_pos = None
+
+        #creating large noise arrays slows down fps, create 100 arrays at startup instead
+        self.noiseArrs = []
+        for i in range(100):
+            self.noiseArrs.append((np.random.random((self.width, self.height)) * 30).astype(np.uint16))
 
         #start image recording thread
         self.start_acquisition()
@@ -43,12 +51,20 @@ class FakeCalCamera(Camera):
         return self.exposure_time
 
     def get_microscope_image(self, x, y):
+        if self.last_img is None or self.last_stage_pos[0] != x or self.last_stage_pos[1] != y:
+            #we need to recalculate what the stage sees
+            frame = np.roll(self.frame, int(y), axis=0)
+            frame = np.roll(frame, int(x), axis=1)
+            frame = frame[self.height//2:self.height//2+self.height,
+                        self.width//2:self.width//2+self.width]
+            
+            #update cached frame
+            self.last_stage_pos = [x, y]
+            self.last_img = frame
+        else:
+            frame = self.last_img
+            
         self.frameno += 1
-        frame = np.roll(self.frame, int(y), axis=0)
-        frame = np.roll(frame, int(x), axis=1)
-        frame = frame[self.height//2:self.height//2+self.height,
-                      self.width//2:self.width//2+self.width]
-
         return Image.fromarray(frame)
 
     def get_16bit_image(self):
@@ -63,6 +79,7 @@ class FakeCalCamera(Camera):
         Returns the current image.
         This is a blocking call (wait until next frame is available)
         '''
+        start = time.time()
         # Use the part of the image under the microscope
         stage_x, stage_y, stage_z = self.manipulator.position_group([4, 5, 6])
 
@@ -84,9 +101,15 @@ class FakeCalCamera(Camera):
 
         #add noise, exposure
         exposure_factor = self.exposure_time/30.
-        frame = frame + np.random.random((self.height, self.width)) * 30
-        frame = np.array(np.clip(frame*exposure_factor, 0, 255),
-                        dtype=np.uint8)
+
+        frame = frame + self.noiseArrs[self.frameno % len(self.noiseArrs)] #use pregenerated noise to increase fps
+        frame[np.where(frame >= 255)] = 255
+        frame[np.where(frame < 0)] = 0
+        frame = frame.astype(np.uint8)
+
+        dt = time.time() - start
+        if dt < (1/self.targetFramerate):
+            time.sleep((1/self.targetFramerate) - dt)
 
         return frame
 

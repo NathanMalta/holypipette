@@ -135,7 +135,7 @@ class FocusUpdater(Thread):
 
 
 class StageCalHelper():
-    '''A helper class to aid with stage focusing
+    '''A helper class to aid with Stage Calibration
     '''
     
     CAL_MAX_SPEED = 1000
@@ -146,9 +146,9 @@ class StageCalHelper():
         self.camera : Camera = camera
 
     def calibrateContinuous(self, distance):
-        '''tell the stage to go a certain (larger) distance at a low max speed.
-           Take a bunch of pictures and determine focus score.  Finally,
-           move the stage to the position with the best focus score 
+        '''Tell the stage to go a certain distance at a low max speed.
+           Take a bunch of pictures and run optical flow. Use optical flow information
+           to create a linear transform from stage microns to image pixels. 
         '''
 
         #move the microscope a certain distance forward
