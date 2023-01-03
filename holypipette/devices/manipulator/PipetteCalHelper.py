@@ -57,8 +57,9 @@ class PipetteCalHelper():
         for i, (frame, pipettePos) in enumerate(framesAndPoses):
             if i % 10 == 0:
                 print(f"determining pipette path... {i/len(framesAndPoses)}%")
-            x, y = self.pipetteFinder.find_pipette(frame)
-            pixelsAndPoses.append([x,y, pipettePos[0], pipettePos[1]])
+            imgPos = self.pipetteFinder.find_pipette(frame)
+            if imgPos is not None:
+                pixelsAndPoses.append([imgPos[0], imgPos[1], pipettePos[0], pipettePos[1]])
         
         pixelsAndPoses = np.array(pixelsAndPoses)
 
