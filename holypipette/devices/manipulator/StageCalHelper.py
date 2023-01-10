@@ -141,10 +141,11 @@ class StageCalHelper():
     CAL_MAX_SPEED = 1000
     NORMAL_MAX_SPEED = 10000
 
-    def __init__(self, stage: Manipulator, camera: Camera):
+    def __init__(self, stage: Manipulator, camera: Camera, frameLag: int):
         self.stage : Manipulator = stage
         self.camera : Camera = camera
         self.lastFrameNo : int = None
+        self.frameLag = frameLag
 
     def calibrateContinuous(self, distance):
         '''Tell the stage to go a certain distance at a low max speed.
@@ -162,7 +163,6 @@ class StageCalHelper():
         framesAndPoses = []
         currPos = self.stage.position()
         startPos = currPos
-        start = time.time()
         _, _, _, firstFrame = self.camera._last_frame_queue[0]
         p0 = self.calcOpticalFlowP0(firstFrame)
         while abs(currPos[0] - commandedPos[0]) > 0.3 or abs(currPos[1] - commandedPos[1]) > 0.3:
@@ -181,14 +181,14 @@ class StageCalHelper():
         imgPosStagePosList = []
         x_pix_total = 0
         y_pix_total = 0
-        for i in range(len(framesAndPoses) - 1):
-            lastFrame, _, _ = framesAndPoses[i]
-            currFrame, x_microns, y_microns = framesAndPoses[i + 1]
+        for i in range(len(framesAndPoses) - self.frameLag):
+            lastFrame, last_x_microns, last_y_microns = framesAndPoses[i]
+            currFrame, x_microns, y_microns = framesAndPoses[i + self.frameLag]
 
             p0 = self.calcOpticalFlowP0(lastFrame)
             x_pix, y_pix = self.calcOpticalFlow(lastFrame, currFrame, p0)
-            x_pix_total += x_pix
-            y_pix_total += y_pix
+            x_pix_total += x_pix / self.frameLag
+            y_pix_total += y_pix / self.frameLag
 
             imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
         imgPosStagePosList = np.array(imgPosStagePosList)

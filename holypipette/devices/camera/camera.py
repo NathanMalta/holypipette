@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage import fourier_gaussian
 import warnings
+import traceback
 from scipy.optimize import brentq
 try:
     import cv2
@@ -116,7 +117,9 @@ class AcquisitionThread(threading.Thread):
             try:
                 frame = self.camera.raw_snap()
             except Exception as ex:
-                print('something went wrong acquiring an image, waiting for 100ms: ' + str(ex))
+                print('something went wrong acquiring an image, waiting for 100ms: ')
+                traceback.print_exception(type(ex), ex, ex.__traceback__)
+
                 time.sleep(.1)
                 continue
             # Put image into queues for disk storage and display

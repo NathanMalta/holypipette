@@ -15,7 +15,7 @@ class FakeCalCamera(Camera):
         self.exposure_time : int = 30
         self.manipulator : Manipulator = manipulator
         self.image_z : float = image_z
-        self.pixels_per_micron : float = .25  # pixels / micrometers
+        self.pixels_per_micron : float = 1.25  # pixels / micrometers
         self.frameno : int = 0
         self.pipette = FakePipette(self.manipulator, self.pixels_per_micron)
         self.targetFramerate = 40

@@ -47,12 +47,16 @@ class CalibrationConfig(Config):
                                      doc='x, y dist to move for stage cal.',
                                      bounds=(0, 10000))
     
+    frame_lag = NumberWithUnit(5, unit='frames',
+                                     doc='number of frames between for computing change with optical flow',
+                                     bounds=(0, 10000))
+    
     pipette_diag_move = NumberWithUnit(2500, unit='um',
                                      doc='x, y dist to move for pipette cal.',
                                      bounds=(100, 10000))
     
 
-    categories = [('Stage Calibration', ['autofocus_dist', 'stage_diag_move']),
+    categories = [('Stage Calibration', ['autofocus_dist', 'stage_diag_move', 'frame_lag']),
                   ('Pipette Calibration', ['pipette_diag_move']),
                   ('Display', ['position_update'])]
 
@@ -440,7 +444,7 @@ class CalibratedStage(CalibratedUnit):
         self.saved_state_question = 'Move stage back to initial position?'
 
         self.focusHelper = FocusHelper(microscope, camera)
-        self.stageCalHelper = StageCalHelper(unit, camera)
+        self.stageCalHelper = StageCalHelper(unit, camera, self.config.frame_lag)
 
         # It should be an XY stage, ie, two axes
         if len(self.axes) != 2:
