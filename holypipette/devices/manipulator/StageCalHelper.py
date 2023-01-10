@@ -182,8 +182,6 @@ class StageCalHelper():
         x_pix_total = 0
         y_pix_total = 0
         for i in range(len(framesAndPoses) - 1):
-            if i % 10 == 0:
-                print(f"{i}/{len(framesAndPoses)}")
             lastFrame, _, _ = framesAndPoses[i]
             currFrame, x_microns, y_microns = framesAndPoses[i + 1]
 
@@ -192,7 +190,6 @@ class StageCalHelper():
             x_pix_total += x_pix
             y_pix_total += y_pix
 
-            print(x_pix, y_pix, x_microns, y_microns)
             imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
         imgPosStagePosList = np.array(imgPosStagePosList)
         
@@ -237,14 +234,6 @@ class StageCalHelper():
             good_new = p1[st==1]
             good_old = p0[st==1]
         
-            # draw the tracks
-            for i, (new, old) in enumerate(zip(good_new, good_old)):
-                a, b = new.ravel()
-                c, d = old.ravel()
-                currFrame = cv2.line(currFrame, (int(a), int(b)), (int(c), int(d)), 0, 2)
-                currFrame = cv2.circle(currFrame, (int(a), int(b)), 5, 0, -1)
-
-
          #find median movement vector
         dMovement = good_new - good_old
         medianVect = np.median(dMovement, axis=0)
