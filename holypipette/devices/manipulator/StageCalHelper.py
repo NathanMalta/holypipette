@@ -144,6 +144,7 @@ class StageCalHelper():
     def __init__(self, stage: Manipulator, camera: Camera):
         self.stage : Manipulator = stage
         self.camera : Camera = camera
+        self.lastFrameNo : int = None
 
     def calibrateContinuous(self, distance):
         '''Tell the stage to go a certain distance at a low max speed.
@@ -157,28 +158,49 @@ class StageCalHelper():
         axes = np.array([0, 1], dtype=int)
         self.stage.absolute_move_group(commandedPos, axes)
 
-        #start recording focus values and positions
-        calThread = CalibrationUpdater(self.stage, self.camera)
-        calThread.start()
-
-        #wait for the microscope to reach the pos
+        #wait for the microscope to reach the pos, recording frames
+        framesAndPoses = []
         currPos = self.stage.position()
+        startPos = currPos
+        start = time.time()
+        _, _, _, firstFrame = self.camera._last_frame_queue[0]
+        p0 = self.calcOpticalFlowP0(firstFrame)
         while abs(currPos[0] - commandedPos[0]) > 0.3 or abs(currPos[1] - commandedPos[1]) > 0.3:
-            time.sleep(0.1)
+            while self.lastFrameNo == self.camera.get_frame_no():
+                time.sleep(0.05) #wait for a new frame to be read from the camera
+            self.lastFrameNo = self.camera.get_frame_no()
             currPos = self.stage.position()
 
-        #stop the focus recording thread
-        calThread.stop()
+            #get latest img
+            _, _, _, frame = self.camera._last_frame_queue[0]
 
-        #wait for focus thread to stop
-        while not calThread.didFinish:
-            # print('waiting for thread finish...')
-            time.sleep(0.01)
+            framesAndPoses.append([frame.copy(), currPos[0] - startPos[0], currPos[1] - startPos[1]])
 
+        #run optical flow on the recorded frames
+        print('running optical flow...')
+        imgPosStagePosList = []
+        x_pix_total = 0
+        y_pix_total = 0
+        for i in range(len(framesAndPoses) - 1):
+            if i % 10 == 0:
+                print(f"{i}/{len(framesAndPoses)}")
+            lastFrame, _, _ = framesAndPoses[i]
+            currFrame, x_microns, y_microns = framesAndPoses[i + 1]
+
+            p0 = self.calcOpticalFlowP0(lastFrame)
+            x_pix, y_pix = self.calcOpticalFlow(lastFrame, currFrame, p0)
+            x_pix_total += x_pix
+            y_pix_total += y_pix
+
+            print(x_pix, y_pix, x_microns, y_microns)
+            imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
+        imgPosStagePosList = np.array(imgPosStagePosList)
+        
         #for some reason, estimateAffinePartial2D only works with int64
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
-        imgPosStagePosList = (calThread.imgPosStagePosList.copy() * 100).astype(np.int64) 
+        imgPosStagePosList = (imgPosStagePosList * 100).astype(np.int64) 
         #compute affine transformation matrix
+        print(imgPosStagePosList)
         mat, inVsOut = cv2.estimateAffinePartial2D(imgPosStagePosList[:,2:4], imgPosStagePosList[:,0:2])
 
         #fix intercept - set image center --> stage center
@@ -191,87 +213,62 @@ class StageCalHelper():
         #return transformation matrix
         return mat
 
+    def calcOpticalFlowP0(self, firstFrame):
+        #params for corner detector
+        feature_params = dict(maxCorners = 100,
+                                qualityLevel = 0.5,
+                                minDistance = 7,
+                                blockSize = 7)
+        p0 = cv2.goodFeaturesToTrack(firstFrame, mask = None, **feature_params)
+        return p0
+
+
+    def calcOpticalFlow(self, lastFrame, currFrame, p0):
+        #params for optical flow
+        lk_params = dict(winSize  = (15, 15),
+                    maxLevel = 5,
+                    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+
+        # calculate optical flow from first frame
+        p1, st, err = cv2.calcOpticalFlowPyrLK(lastFrame, currFrame, p0, None, **lk_params)
+
+        # Select good points
+        if p1 is not None:
+            good_new = p1[st==1]
+            good_old = p0[st==1]
+        
+            # draw the tracks
+            for i, (new, old) in enumerate(zip(good_new, good_old)):
+                a, b = new.ravel()
+                c, d = old.ravel()
+                currFrame = cv2.line(currFrame, (int(a), int(b)), (int(c), int(d)), 0, 2)
+                currFrame = cv2.circle(currFrame, (int(a), int(b)), 5, 0, -1)
+
+
+         #find median movement vector
+        dMovement = good_new - good_old
+        medianVect = np.median(dMovement, axis=0)
+        
+        return medianVect[0], medianVect[1]
+
+
     def calibrate(self):
         '''Calibrates the microscope stage using optical flow and stage encoders to create a um -> pixels transformation matrix
         '''
 
         self.stage.set_max_speed(self.CAL_MAX_SPEED)
+        # self.stage.set_max_accel(10)
+
         initPos = self.stage.position()
         mat = self.calibrateContinuous(500)
+        # commandedPos = np.array([initPos[0] + 200, initPos[1] - 200])
+        # axes = np.array([0, 1], dtype=int)
+        # self.stage.absolute_move_group(commandedPos, axes)
+        self.stage.wait_until_still()
+        currPos = self.stage.position()
         
         self.stage.set_max_speed(self.NORMAL_MAX_SPEED)
         self.stage.absolute_move(initPos)
         self.stage.wait_until_still()
 
         return mat
-
-class CalibrationUpdater(Thread):
-    def __init__(self, stage : Manipulator, camera : Camera):
-       Thread.__init__(self)
-
-       self.isRunning : bool = True
-       self.camera : Camera = camera
-       self.stage : Manipulator = stage
-       self.lastFrameNo : int = 0
-       self.imgPosStagePosList : list = []
-       self.didFinish : bool = False
-
-    def run(self):
-        '''continuously read frames from camera, and record their focus and the microscope's z position.  Assumes constant velocity!
-        '''
-        # params for ShiTomasi corner detection
-        feature_params = dict(maxCorners = 100,
-                              qualityLevel = 0.3,
-                              minDistance = 7,
-                              blockSize = 7)
-
-        # Parameters for lucas kanade optical flow
-        lk_params = dict(winSize  = (15, 15),
-                         maxLevel = 5,
-                         criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-
-        _, _, _, lastFrame = self.camera._last_frame_queue[0]
-        startPos = np.array(self.stage.position())
-        p0 = cv2.goodFeaturesToTrack(lastFrame, mask = None, **feature_params)
-        self.lastFrameNo = self.camera.get_frame_no()
-
-        while self.isRunning:
-            while self.lastFrameNo == self.camera.get_frame_no():
-                time.sleep(0.01) #wait for a new frame to be read from the camera
-            self.lastFrameNo = self.camera.get_frame_no()
-            
-            #get latest img
-            _, _, _, frame = self.camera._last_frame_queue[0]
-            # calculate optical flow
-            p1, st, err = cv2.calcOpticalFlowPyrLK(lastFrame, frame, p0, None, **lk_params)
-
-            # Select good points
-            if p1 is not None:
-                good_new = p1[st==1]
-                good_old = p0[st==1]
-
-            # draw the tracks
-            for i, (new, old) in enumerate(zip(good_new, good_old)):
-                a, b = new.ravel()
-                c, d = old.ravel()
-                frame = cv2.line(frame, (int(a), int(b)), (int(c), int(d)), 0, 2)
-                frame = cv2.circle(frame, (int(a), int(b)), 5, 0, -1)
-
-            #find median movement vector
-            dMovement = good_new - good_old
-            medianVect = np.median(dMovement, axis=0)
-            frame = cv2.circle(frame, (512,512), 5, 255, -1)
-            frame = cv2.line(frame, (int(medianVect[0] + 512), int(medianVect[1] + 512)), (512,512), 255, 3)
-            
-            # medianVect = medianVect * -1 #flip the vector so that x+ is right and y+ is up
-            #append to list
-            stagePos = np.array(self.stage.position()) - startPos
-            # print(medianVect[0], medianVect[1], stagePos[0], stagePos[1], sep=', ')
-            self.imgPosStagePosList.append([medianVect[0], medianVect[1], stagePos[0], stagePos[1]])
-        
-        self.imgPosStagePosList = np.array(self.imgPosStagePosList)
-        self.didFinish = True #create a flag when we creating the arr
-
-    def stop(self):
-        self.isRunning = False
-

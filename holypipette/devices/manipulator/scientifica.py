@@ -7,6 +7,7 @@ import sys
 import time
 import numpy as np
 import os
+import threading
 
 mm_dir = 'C:\\Program Files\\Micro-Manager-2.0gamma'
 sys.path.append(mm_dir)
@@ -30,6 +31,10 @@ class Scientifica(Manipulator):
         self.mmc = mmc
 
         print(f"SCIENTIFICA Z STAGE PROPERTIES: {mmc.getDevicePropertyNames('ZStage')}")
+        print(f"SCIENTIFICA XY STAGE PROPERTIES: {mmc.getDevicePropertyNames('XYStage')}")
+
+        print(f"SCIENTIFICA SPEED MIN: {mmc.getPropertyLowerLimit('XYStage', 'MaxSpeed')}")
+        print(f"SCIENTIFICA SPEED Max: {mmc.getPropertyUpperLimit('XYStage', 'MaxSpeed')}")
         
         self.set_max_accel(100)
         self.set_max_speed(10000)
@@ -59,13 +64,17 @@ class Scientifica(Manipulator):
         except:
             pass #object deleted before mmc init
 
-    def position(self, axis):
+    def position(self, axis=None):
         if axis == 1:
             return self.mmc.getXPosition('XYStage')
         if axis == 2:
             return self.mmc.getYPosition('XYStage')
         if axis == 3:
             return self.mmc.getPosition('ZStage')
+        if axis == [1,2]:
+            return self.mmc.getXYPosition('XYStage')
+        if axis == None:
+            return [self.mmc.getXPosition('XYStage'), self.mmc.getYPosition('XYStage'), self.mmc.getPosition('ZStage')]
 
     def position_group(self, axes):
         axes4 = [0, 0, 0, 0]
@@ -74,24 +83,39 @@ class Scientifica(Manipulator):
         return np.array(axes4[:len(axes)])
 
     def absolute_move(self, x, axis):
-        if axis == 1:
-            self.mmc.setXYPosition('XYStage', x, self.mmc.getYPosition('XYStage'))
-        if axis == 2:
-            self.mmc.setXYPosition('XYStage', self.mmc.getXPosition('XYStage'), x)
-        if axis == 3:
-            print("setting z to ", x)
-            while True:
-                try:
-                    self.mmc.setPosition('ZStage', x)
-                    break
-                except:
-                    time.sleep(0.1)
+        def move():
+            if axis == 1:
+                self.mmc.setXYPosition('XYStage', x, self.mmc.getYPosition('XYStage'))
+            if axis == 2:
+                self.mmc.setXYPosition('XYStage', self.mmc.getXPosition('XYStage'), x)
+            if axis == 3:
+                print("setting z to ", x)
+                while True:
+                    try:
+                        self.mmc.setPosition('ZStage', x)
+                        break
+                    except:
+                        time.sleep(0.1)
+
+        T = threading.Thread(target=move)
+        T.start()
 
     def absolute_move_group(self, x, axes):
-        for i in range(len(axes)):
-            self.absolute_move(x[i], axes[i])
-            self.wait_until_still()
+        cmdPos = self.position()
+        print(axes)
+        print(cmdPos)
+        print(x)
 
+        for i in axes:
+            cmdPos[i - 1] = x[i - 1]
+        
+        self.mmc.setXYPosition('XYStage', cmdPos[0], cmdPos[1])
+        self.wait_until_reached(cmdPos, axes=[1,2])
+        # self.mmc.setPosition('ZStage', cmdPos[2])
+        # self.wait_until_reached(cmdPos, axes=[3])
+
+
+        
     def relative_move(self, x, axis):
         while True:
             try:
@@ -109,8 +133,8 @@ class Scientifica(Manipulator):
             
 
     def wait_until_still(self, axes = None, axis = None):
-        self.mmc.waitForSystem()
-        self.sleep(.7) # That's a very long time!
+        while self.mmc.deviceBusy('XYStage') or self.mmc.deviceBusy('ZStage'):
+            self.sleep(.3)
 
     def stop(self):
         self.mmc.stop()
