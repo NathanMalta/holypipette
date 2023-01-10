@@ -124,4 +124,4 @@ class ManipulatorUnit(Manipulator):
         self.dev.set_max_speed(speed)
     
     def set_max_accel(self, accel):
-        self.dev.set_max_speed(accel)
+        self.dev.set_max_accel(accel)
