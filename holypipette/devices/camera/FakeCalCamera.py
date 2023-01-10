@@ -116,6 +116,8 @@ class FakeCalCamera(Camera):
 class FakePipette():
 
     def __init__(self, manipulator:Manipulator, microscope_pixels_per_micron, stage_to_pipette=np.eye(4,4)):
+
+        stage_to_pipette = np.array([[0.7, -0.1, 0, 0], [0.1, 0.7, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
         self.manipulator = manipulator
         self.pixels_per_micron = microscope_pixels_per_micron
         self.stage_to_pipette = stage_to_pipette #homoegeneous transform matrix from stage to pipette

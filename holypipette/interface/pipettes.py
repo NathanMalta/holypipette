@@ -222,6 +222,8 @@ class PipetteInterface(TaskInterface):
                       description='Go to the floor (cover slip)',
                       task_description='Go to the floor (cover slip)')
     def go_to_floor(self):
+        if self.microscope.floor_Z is None:
+            raise RuntimeError("Coverslip floor must be set.")
         self.execute(self.microscope.absolute_move,
                      argument=self.microscope.floor_Z)
 

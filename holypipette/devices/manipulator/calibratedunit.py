@@ -35,26 +35,25 @@ from holypipette.config import Config, NumberWithUnit, Number, Boolean
 
 
 class CalibrationConfig(Config):
-    position_tolerance = NumberWithUnit(0.5, unit='μm',
-                                        doc='Position tolerance',
-                                        bounds=(0, 10))
-    sleep_time = NumberWithUnit(1., unit='s',
-                                doc='Sleep time before taking pictures',
-                                bounds=(0, 2))
-    stack_depth = NumberWithUnit(8, unit='μm', doc='Depth of stack of photos',
-                                 bounds=(0, 20))
-    calibration_moves = Number(9, doc='Number of calibration moves',
-                               bounds=(1, 20))
     position_update = NumberWithUnit(1000, unit='ms',
-                                     doc='Update displayed position every',
+                                     doc='dt for updating displayed pos.',
                                      bounds=(0, 10000))
-    equalize_axes = Boolean(True, doc='Normalize stage axes')
-    pause_in_stack = NumberWithUnit(0.3, unit='s',
-                                doc='Pause between pictures of a z-stack',
-                                bounds=(0, 2))
-    categories = [('Calibration', ['sleep_time', 'position_tolerance',
-                                   'stack_depth', 'calibration_moves', 'equalize_axes', 'pause_in_stack',
-                                   ]),
+    
+    autofocus_dist = NumberWithUnit(500, unit='um',
+                                     doc='z dist to scan for autofocusing.',
+                                     bounds=(100, 5000))
+    
+    stage_diag_move = NumberWithUnit(500, unit='um',
+                                     doc='x, y dist to move for stage cal.',
+                                     bounds=(0, 10000))
+    
+    pipette_diag_move = NumberWithUnit(2500, unit='um',
+                                     doc='x, y dist to move for pipette cal.',
+                                     bounds=(100, 10000))
+    
+
+    categories = [('Stage Calibration', ['autofocus_dist', 'stage_diag_move']),
+                  ('Pipette Calibration', ['pipette_diag_move']),
                   ('Display', ['position_update'])]
 
 
@@ -156,7 +155,6 @@ class CalibratedUnit(ManipulatorUnit):
             raise CalibrationError
         u = self.position() # position vector in manipulator unit system
 
-        print(f"M {self.M}\n\nU: {u}\n\nR0: {self.r0}")
         return dot(self.M, u) + self.r0 + self.stage.reference_position()
 
     def reference_move_not_X(self, r, safe = False):
@@ -201,7 +199,6 @@ class CalibratedUnit(ManipulatorUnit):
         safe : if True, moves the Z axis first or last, so as to avoid touching the coverslip
         '''
 
-        print(f"Moving to: {r}")
         if np.isnan(np.array(r)).any():
             raise RuntimeError("can not move to nan location.")
         
@@ -308,49 +305,6 @@ class CalibratedUnit(ManipulatorUnit):
         # Final move
         self.reference_move(r + withdraw * p * self.up_direction[0], safe = True) # Or relative move in manipulator coordinates, first axis (faster)
 
-    def take_photos(self, rig = 1):
-        '''
-        Take photos of the pipette. It is assumed that the pipette is centered and in focus.
-        '''
-        self.info('Taking photos of pipette')
-        if rig == 1:
-            self.pipette_position = pipette_cardinal(crop_center(self.camera.snap()))
-        else:
-            distance = 100
-            self.relative_move(distance, 0)
-            self.wait_until_still(0)
-            self.sleep(0.1)
-            img1 = crop_center(self.camera.snap())
-            self.relative_move(-distance, 0)
-            self.wait_until_still(0)
-            self.sleep(0.1)
-            img2 = crop_center(self.camera.snap())
-            self.pipette_position = pipette_cardinal2(img1, img2)
-
-        self.info("Pipette cardinal position: "+str(self.pipette_position))
-
-        z0 = self.microscope.position()
-        z = z0 + arange(-self.config.stack_depth, self.config.stack_depth + 1)  # +- stack_depth um around current position
-        stack = self.microscope.stack(self.camera, z, preprocessing=lambda img: crop_cardinal(crop_center(img), self.pipette_position),
-                                      save = 'series', pause=self.config.pause_in_stack)
-        # Caution: image at depth -5 corresponds to the pipette being at depth +5 wrt the focal plane
-
-        # Check microscope position
-        if abs(z0-self.microscope.position())>self.config.position_tolerance:
-            raise CalibrationError('Microscope has not returned to its initial position.')
-        self.sleep(self.config.sleep_time)
-        image = self.camera.snap()
-        x0, y0, _ = templatematching(image, stack[self.config.stack_depth])
-
-        # Calculate minimum correlation with stack images
-        image = stack[len(stack)//2] # Focused image
-        min_match = min([templatematching(image, template)[2] for template in stack])
-        # We accept matches with matching correlation up to twice worse
-        self.min_photo_match = min_match
-
-        self.photos = stack
-        self.photo_x0 = x0
-        self.photo_y0 = y0
 
     def pixel_per_um(self, M=None):
         '''
@@ -383,212 +337,8 @@ class CalibratedUnit(ManipulatorUnit):
             angle = abs(180/pi * arcsin(self.M[2,axis] / length))
             print('Angle of axis '+str(axis)+": "+str(angle))
 
-    def move_new_pipette_back(self):
-        '''
-        Moves a new (uncalibrated) pipette back under the microscope
-        '''
-        # First move it 2 mm before target position
-        withdraw = 2000.
-        self.reference_move(array([0,0,self.microscope.position()])+ withdraw * self.M[:,0] * self.up_direction[0])
-        self.wait_until_still()
 
-        # Take photos to analyze the mean contrast (not exactly)
-        images=[]
-        for _ in range(10):
-            images.append(std(self.camera.snap()))
-            self.sleep(0.1)
-        I0 = mean(images)
-        sigma = I0*.2 # allow for a 20% change
-        self.debug('Contrast: '+str(I0)+" +- "+str(sigma))
-
-        # Move by steps of 100 um until the contrast changes
-        found = False
-        for i in range(50): # 5 mm maximum
-            self.debug('Moving down, i='+str(i))
-            #self.relative_move(-50.*self.up_direction[0],0)
-            # absolute move just to ensure it's fast
-            self.absolute_move(self.position(0)-100. * self.up_direction[0], 0)
-            self.wait_until_still(0)
-            I = std(self.camera.snap())
-            if abs(I-I0)>sigma:
-                found = True
-                break
-
-        if found:
-            self.info('Pipette found! with change = '+str(abs(I-I0)/I0))
-        else:
-            self.info('Pipette not found')
-
-    # ***** REFACTORING OF CALIBRATION ****
-    def locate_pipette(self, threshold=None, depth=None, return_correlation=False):
-        '''
-        Locates the pipette on screen, using photos previously taken.
-
-        Parameters
-        ----------
-        threshold : correlation threshold
-        depth : maximum distance in z to search; if None, only uses the depth of the photo stack
-        return_correlation : if True, returns the best correlation in the template matching
-
-        Returns
-        -------
-        x,y,z : position on screen relative to center
-        '''
-        stack = self.photos
-
-        if depth is not None:
-            # Move the focus so as explore a larger depth
-            z0 = self.microscope.position()
-            z = -depth+len(stack)/2
-            valmax = -1
-            while z<depth+len(stack)/2:
-                self.debug('Depth: '+str(z))
-                self.microscope.absolute_move(z0 + z)
-                self.microscope.wait_until_still()
-                x,y,zt,c = self.locate_pipette(threshold=threshold, depth=None, return_correlation=True)
-                if c>valmax:
-                    xm,ym,zm,valmax = x,y,z+zt,c
-                z += len(stack)
-            self.microscope.absolute_move(z0)
-            self.microscope.wait_until_still()
-            self.info('Pipette identified at depth '+str(zm))
-            if return_correlation:
-                return xm,ym,zm,valmax
-            else:
-                return xm,ym,zm
-
-        x0, y0 = self.photo_x0, self.photo_y0
-        if threshold is None:
-            threshold = 1-(1-self.min_photo_match)*2
-
-        image = self.camera.snap()
-
-        # Error margins for position estimation
-        template_height, template_width = stack[self.config.stack_depth].shape
-        xmargin = template_width / 4
-        ymargin = template_height / 4
-
-        # First template matching to estimate pipette position on screen
-        xt, yt, _ = templatematching(image, stack[self.config.stack_depth])
-
-        image = self.camera.snap()
-        # Crop image around estimated position
-        image = image[int(yt - ymargin):int(yt + template_height + ymargin),
-                      int(xt - xmargin):int(xt + template_width + xmargin)]
-        dx = xt - xmargin
-        dy = yt - ymargin
-
-        valmax = -1
-        for i, template in enumerate(stack):  # we look for the best matching template
-            xt, yt, val = templatematching(image, template)
-            xt += dx
-            yt += dy
-            if val > valmax:
-                valmax = val
-                x, y, z = xt, yt, self.config.stack_depth - i  # note the sign for z
-
-        self.debug('Correlation=' + str(valmax))
-        if valmax < threshold:
-            raise CalibrationError('Matching error: the pipette is absent or not focused')
-
-        self.info('Pipette identified at x,y,z=' + str(x - x0) + ',' + str(y - y0) + ',' + str(z))
-
-        if return_correlation:
-            return x-x0, y-y0, z, valmax
-        else:
-            return x-x0, y-y0, z
-
-    def move_and_track(self, distance, axis, M, move_stage=False):
-        '''
-        Moves along one axis and track the pipette with microscope and optionally the stage.
-
-        Arguments
-        ---------
-        distance : distance to move
-        axis : axis number
-
-        Returns
-        -------
-        x,y,z: pipette position on screen and focal plane
-        '''
-        self.relative_move(distance, axis)
-        self.abort_if_requested()
-        # Estimate movement on screen
-        estimate = M[:, axis]*distance
-
-        # Move the stage to compensate
-        if move_stage:
-            self.abort_if_requested()
-            self.debug('Compensatory movement: {}'.format(list(estimate)))
-            self.stage.reference_relative_move(-estimate)
-            self.stage.wait_until_still()
-
-        self.abort_if_requested()
-
-        # Autofocus
-        self.wait_until_still(axis) # Wait until pipette has moved
-        self.microscope.relative_move(estimate[2])
-        self.microscope.wait_until_still()
-
-        # Locate pipette
-        self.sleep(self.config.sleep_time)
-        x, y, z = self.locate_pipette()
-        self.abort_if_requested()
-        # Focus, move stage and locate again
-        self.microscope.relative_move(z)
-        if move_stage:
-            self.abort_if_requested()
-            self.stage.reference_relative_move(-array([x, y, 0]))
-            self.stage.wait_until_still()
-        self.abort_if_requested()
-        self.microscope.wait_until_still()
-        self.sleep(self.config.sleep_time)
-        self.abort_if_requested()
-        x, y, z = self.locate_pipette()
-
-        return x, y, z
-
-    def move_back(self, z0, u0, us0=None):
-        '''
-        Moves back up to original position, refocus and locate pipette
-
-        Arguments
-        ---------
-        z0 : microscope position
-        u0 : unit position
-        us0 : stage position
-
-        Returns
-        -------
-        x,y,z : pipette position on screen and focal plane
-        '''
-        # Move back
-        self.microscope.absolute_move(z0)
-        self.microscope.wait_until_still()
-        self.abort_if_requested()
-        self.absolute_move(u0)
-        if us0 is not None: # stage moves too
-            self.abort_if_requested()
-            self.stage.absolute_move(us0)
-            self.stage.wait_until_still()
-        self.abort_if_requested()
-        self.wait_until_still()
-
-        # Locate pipette
-        self.sleep(self.config.sleep_time)
-        _, _, z = self.locate_pipette()
-
-        self.abort_if_requested()
-
-        # Focus and locate again
-        self.microscope.relative_move(z)
-        self.microscope.wait_until_still()
-        self.sleep(self.config.sleep_time)
-        x, y, z = self.locate_pipette()
-
-        return x,y,z
-
-    def calculate_up_directions(self, M):
+    def calculate_up_directions(self, M): #TODO: does this work?
         '''
         Calculates up directions for all axes and microscope from the matrix.
         '''
@@ -611,29 +361,16 @@ class CalibratedUnit(ManipulatorUnit):
                 self.up_direction[axis] = s
             self.info('Axis ' + str(axis) + ' up direction: ' + str(self.up_direction[0]))
 
-    def refine(self):
-        '''
-        Refine the calibration by iterating over large movements.
-        '''
-        # *** Calculate image borders ***
-        template_height, template_width = self.photos[self.config.stack_depth].shape
-        width, height = self.camera.width, self.camera.height
-        # We use a margin of 1/4 of the template
-        left_border = -(width/2-(template_width*3)/4)
-        right_border = (width/2-(template_width*3)/4)
-        top_border = -(height/2-(template_height*3)/4)
-        bottom_border = (height/2-(template_height*3)/4)
-
-    def calibrate(self):
+    def calibrate(self): #TODO: Z-Axis calibration?
         '''
         Automatic calibration.
         Starts without moving the stage, then moves the stage (unless it is fixed).
         '''
         
-        mat = self.pipetteCalHelper.calibrate()
+        mat = self.pipetteCalHelper.calibrate(dist=self.config.pipette_diag_move)
+        print(f"orig mat {mat}\n\n")
         M = np.eye(3,3)
         M[0:2,0:2] = mat[:, 0:2]
-        print(f"output: {M}")
 
         if not isnan(M).any():
             # *** Compute the (pseudo-)inverse ***
@@ -682,33 +419,6 @@ class CalibratedUnit(ManipulatorUnit):
         #self.min = config.get('min', self.min)
         #self.max = config.get('max', self.max)
 
-    def normalize_axis(self, column):
-        '''
-        Normalizes a column so that it corresponds to a 1 um move.
-        This requires a calibrated stage.
-        '''
-        mean_pixel_per_um = mean(self.stage.pixel_per_um())
-        return column / ((column[0] + column[1])/mean_pixel_per_um + column[2])
-
-    def equalize_matrix(self, M=None):
-        '''
-        Normalizes the transformation matrix so that each column corresponds to a 1 um move.
-        By default the current transformation matrix is used.
-        This requires a calibrated stage.
-        '''
-        if M is None:
-            return_M = True
-        else:
-            return_M = False
-        mean_pixel_per_um = mean(self.stage.pixel_per_um())
-        for axis in range(len(self.axes)):
-            M[:, axis] = M[:, axis] / ((M[0,axis] + M[1,axis])/mean_pixel_per_um + M[2,axis])
-        if return_M:
-            return M
-        else:
-            self.M = M
-
-
 class CalibratedStage(CalibratedUnit):
     '''
     A horizontal stage calibrated to a fixed reference coordinate system.
@@ -752,27 +462,6 @@ class CalibratedStage(CalibratedUnit):
             r3D = r
         CalibratedUnit.reference_relative_move(self, r3D) # Third coordinate is ignored
 
-    def equalize_matrix(self, M=None):
-        '''
-        Equalizes the length of columns in a matrix, by default the current transformation matrix
-        '''
-        if M is None:
-            return_M = False
-            M = self.M
-        else:
-            return_M = True
-        # We compute the quadratic mean
-        pixel_per_um = ((M**2).sum(axis=0))**.5 # Assuming it is a 2D matrix (the third component is 0)
-        self.debug('{} pixels per um'.format(pixel_per_um))
-        mean_pixel_per_um = ((pixel_per_um**2).mean())**.5 # quadratic mean
-        for axis in range(len(self.axes)):
-            M[:, axis] = M[:, axis] * mean_pixel_per_um / pixel_per_um[axis]
-        if return_M:
-            return M
-        else:
-            self.M = M
-
-
     def calibrate(self):
         '''
         Automatic calibration for a horizontal XY stage
@@ -783,13 +472,14 @@ class CalibratedStage(CalibratedUnit):
 
         self.info('Preparing stage calibration')
         self.info("auto focusing microscope...")
-        self.focusHelper.autofocus()
+        self.focusHelper.autofocus(dist=self.config.autofocus_dist)
         self.info("Finished focusing.")
 
         # use LK optical flow to determine transformation matrix
-        self.M = self.stageCalHelper.calibrate().T
+        self.M = self.stageCalHelper.calibrate(dist=self.config.stage_diag_move).T
         self.Minv = pinv(self.M)
         self.calibrated = True
+        
 
         self.info('Stage calibration done')
         # self.analyze_calibration()

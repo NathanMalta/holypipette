@@ -59,20 +59,20 @@ class FocusHelper():
         #return best score, position
         return bestPos, bestScore
 
-    def autofocus(self):
+    def autofocus(self, dist=500):
         '''Attempts to auto focus the micrscope image by moving in the z-axis
         '''
 
         self.microscope.set_max_speed(self.FOCUSING_MAX_SPEED)
         initPos = self.microscope.position()
-        bestForwardPos, bestForwardScore = self.autofocusContinuous(500)
+        bestForwardPos, bestForwardScore = self.autofocusContinuous(dist)
         
         self.microscope.set_max_speed(self.NORMAL_MAX_SPEED)
         self.microscope.absolute_move(initPos)
         self.microscope.wait_until_still()
         self.microscope.set_max_speed(self.FOCUSING_MAX_SPEED)
 
-        bestBackwardPos, bestBackwardScore = self.autofocusContinuous(-500)
+        bestBackwardPos, bestBackwardScore = self.autofocusContinuous(-dist)
         self.microscope.set_max_speed(self.NORMAL_MAX_SPEED)
 
         if bestBackwardScore < bestForwardScore:
@@ -191,13 +191,13 @@ class StageCalHelper():
         #return transformation matrix
         return mat
 
-    def calibrate(self):
+    def calibrate(self, dist=500):
         '''Calibrates the microscope stage using optical flow and stage encoders to create a um -> pixels transformation matrix
         '''
 
         self.stage.set_max_speed(self.CAL_MAX_SPEED)
         initPos = self.stage.position()
-        mat = self.calibrateContinuous(500)
+        mat = self.calibrateContinuous(dist)
         
         self.stage.set_max_speed(self.NORMAL_MAX_SPEED)
         self.stage.absolute_move(initPos)

@@ -55,8 +55,8 @@ class PipetteCalHelper():
         #find the pipette in all the frames
         pixelsAndPoses = []
         for i, (frame, pipettePos) in enumerate(framesAndPoses):
-            if i % 10 == 0:
-                print(f"determining pipette path... {i/len(framesAndPoses)}%")
+            if i % 30 == 0:
+                print(f"determining pipette path... {i * 100 / len(framesAndPoses) :.2f}%")
             imgPos = self.pipetteFinder.find_pipette(frame)
             if imgPos is not None:
                 pixelsAndPoses.append([imgPos[0], imgPos[1], pipettePos[0], pipettePos[1]])
@@ -65,7 +65,7 @@ class PipetteCalHelper():
 
         #for some reason, estimateAffinePartial2D only works with int64
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
-        pixelsAndPoses = (pixelsAndPoses.copy()).astype(np.int64) 
+        pixelsAndPoses = (pixelsAndPoses.copy() * 100).astype(np.int64) 
         #compute affine transformation matrix
         mat, _ = cv2.estimateAffinePartial2D(pixelsAndPoses[:,2:4], pixelsAndPoses[:,0:2])
 
@@ -79,13 +79,13 @@ class PipetteCalHelper():
         #return transformation matrix
         return mat
 
-    def calibrate(self):
+    def calibrate(self, dist=2500):
         '''Calibrates the pipette using YOLO object detection and pipette encoders to create a um -> pixels transformation matrix
         '''
 
         self.pipette.set_max_speed(self.CAL_MAX_SPEED)
         initPos = self.pipette.position()
-        mat = self.calibrateContinuous(2500)
+        mat = self.calibrateContinuous(dist)
         
         self.pipette.set_max_speed(self.NORMAL_MAX_SPEED)
         self.pipette.absolute_move_group(initPos, [0,1,2])

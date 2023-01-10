@@ -16,7 +16,6 @@ stage = ManipulatorUnit(stageController, [1, 2])
 
 camera = PcoCamera()
 microscope = Microscope(stageController, 3)
-microscope.floor_Z = 0
 microscope.up_direction = 1.0
 
 units = [ManipulatorUnit(sensapexController, [1, 2, 3])]

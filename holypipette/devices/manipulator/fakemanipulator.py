@@ -107,9 +107,9 @@ class FakeManipulator(Manipulator):
 
         print(f'moving to {x} at {self.speeds[axis-1]} um/s current pos: {self.x[axis-1]}')
 
-        if 1 <= axis <= 3:
-            self.debug(f'Pipette Moving To: {self.setpoint[:3]}')
-        elif 4 <= axis <= 6:
-            self.debug(f'Stage Moving To: {self.setpoint[3:]}')
-        else:
-            self.debug(f"moving unknown axis: {axis}")
+        # if 1 <= axis <= 3:
+        #     self.debug(f'Pipette Moving To: {self.setpoint[:3]}')
+        # elif 4 <= axis <= 6:
+        #     self.debug(f'Stage Moving To: {self.setpoint[3:]}')
+        # else:
+        #     self.debug(f"moving unknown axis: {axis}")
