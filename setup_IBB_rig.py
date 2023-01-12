@@ -4,12 +4,13 @@
 from holypipette.devices.amplifier.multiclamp import MultiClampChannel
 from holypipette.devices.amplifier.amplifier import FakeAmplifier
 from holypipette.devices.camera.pcocamera import PcoCamera
-from holypipette.devices.manipulator import SensapexManip, Scientifica
+from holypipette.devices.manipulator import SensapexManip, ScientificaSerial
 from holypipette.devices.pressurecontroller import IBBPressureController, FakePressureController
 from holypipette.devices.manipulator import *
 from serial import Serial
 
-stageController = Scientifica()
+stageSerial = Serial(port='COM6', baudrate=9600, timeout=3)
+stageController = ScientificaSerial(stageSerial)
 
 sensapexController = SensapexManip()
 stage = ManipulatorUnit(stageController, [1, 2])
