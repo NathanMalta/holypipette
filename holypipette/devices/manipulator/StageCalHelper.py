@@ -153,7 +153,7 @@ class StageCalHelper():
            to create a linear transform from stage microns to image pixels. 
         '''
 
-        #move the microscope a certain distance forward
+        #move the microscope a certain distance forward and up
         currPos = self.stage.position()
         commandedPos = np.array([currPos[0] + distance, currPos[1] - distance])
         axes = np.array([0, 1], dtype=int)
@@ -170,6 +170,8 @@ class StageCalHelper():
                 time.sleep(0.05) #wait for a new frame to be read from the camera
             self.lastFrameNo = self.camera.get_frame_no()
             currPos = self.stage.position()
+            print(f'curr: {currPos} command: {commandedPos}')
+
 
             #get latest img
             _, _, _, frame = self.camera._last_frame_queue[0]
@@ -222,8 +224,8 @@ class StageCalHelper():
 
     def calcOpticalFlow(self, lastFrame, currFrame, p0):
         #params for optical flow
-        lk_params = dict(winSize  = (15, 15),
-                    maxLevel = 5,
+        lk_params = dict(winSize  = (30, 30),
+                    maxLevel = 8,
                     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 
         # calculate optical flow from first frame

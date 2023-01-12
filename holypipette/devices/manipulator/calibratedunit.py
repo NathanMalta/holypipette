@@ -47,9 +47,9 @@ class CalibrationConfig(Config):
                                      doc='x, y dist to move for stage cal.',
                                      bounds=(0, 10000))
     
-    frame_lag = NumberWithUnit(5, unit='frames',
+    frame_lag = NumberWithUnit(4, unit='frames',
                                      doc='number of frames between for computing change with optical flow',
-                                     bounds=(0, 10000))
+                                     bounds=(1, 20))
     
     pipette_diag_move = NumberWithUnit(2500, unit='um',
                                      doc='x, y dist to move for pipette cal.',

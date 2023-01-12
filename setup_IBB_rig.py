@@ -9,7 +9,7 @@ from holypipette.devices.pressurecontroller import IBBPressureController, FakePr
 from holypipette.devices.manipulator import *
 from serial import Serial
 
-stageSerial = Serial(port='COM6', baudrate=9600, timeout=3)
+stageSerial = Serial(port='COM6', baudrate=9600, timeout=0.5)
 stageController = ScientificaSerial(stageSerial)
 
 sensapexController = SensapexManip()
@@ -21,7 +21,7 @@ microscope.up_direction = 1.0
 
 units = [ManipulatorUnit(sensapexController, [1, 2, 3])]
 
-amplifier = MultiClampChannel(channel=1)
+amplifier = FakeAmplifier() #MultiClampChannel(channel=1)
 
-pressureSerial = Serial(port='COM15', baudrate=9600, timeout=3)
+pressureSerial = Serial(port='COM15', baudrate=9600, timeout=0)
 pressure = IBBPressureController(channel=1, arduinoSerial=pressureSerial)

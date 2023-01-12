@@ -137,7 +137,7 @@ class Scientifica(Manipulator):
             self.sleep(.3)
 
     def stop(self):
-        self.mmc.stop()
+        self.mmc.stop('XYStage')
 
 
 if __name__ == '__main__':
