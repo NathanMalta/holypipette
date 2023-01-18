@@ -170,8 +170,6 @@ class StageCalHelper():
                 time.sleep(0.05) #wait for a new frame to be read from the camera
             self.lastFrameNo = self.camera.get_frame_no()
             currPos = self.stage.position()
-            print(f'curr: {currPos} command: {commandedPos}')
-
 
             #get latest img
             _, _, _, frame = self.camera._last_frame_queue[0]

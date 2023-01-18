@@ -11,7 +11,7 @@ class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 3000
+    CAL_MAX_SPEED = 1000
     NORMAL_MAX_SPEED = 10000
 
     def __init__(self, pipette: Manipulator, camera: Camera):
@@ -65,7 +65,7 @@ class PipetteCalHelper():
 
         #for some reason, estimateAffinePartial2D only works with int64
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
-        pixelsAndPoses = (pixelsAndPoses.copy() * 100).astype(np.int64) 
+        pixelsAndPoses = (pixelsAndPoses.copy()).astype(np.int64) 
         #compute affine transformation matrix
         mat, _ = cv2.estimateAffinePartial2D(pixelsAndPoses[:,2:4], pixelsAndPoses[:,0:2])
 
@@ -91,4 +91,17 @@ class PipetteCalHelper():
         self.pipette.absolute_move_group(initPos, [0,1,2])
         self.pipette.wait_until_still()
 
-        return mat
+        #find the starting point of the pipette (in pixels) for offset calculation
+        xs = []
+        ys = []
+        for i in range(10):
+            _, _, _, frame = self.camera._last_frame_queue[0]
+            out = self.pipetteFinder.find_pipette(frame)
+            if out != None:
+                frame = cv2.circle(frame, out, 10, 0, 2)
+                xs.append(out[0])
+                ys.append(out[1])
+        xs = np.array(xs)
+        ys = np.array(ys)
+
+        return mat, (np.median(xs), np.median(ys))

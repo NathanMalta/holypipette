@@ -110,7 +110,7 @@ class FakeCalCamera(Camera):
         dt = time.time() - start
         if dt < (1/self.targetFramerate):
             time.sleep((1/self.targetFramerate) - dt)
-
+        
         return frame
 
 class FakePipette():

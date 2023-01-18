@@ -51,7 +51,7 @@ class CalibrationConfig(Config):
                                      doc='number of frames between for computing change with optical flow',
                                      bounds=(1, 20))
     
-    pipette_diag_move = NumberWithUnit(2500, unit='um',
+    pipette_diag_move = NumberWithUnit(300, unit='um',
                                      doc='x, y dist to move for pipette cal.',
                                      bounds=(100, 10000))
     
@@ -371,7 +371,7 @@ class CalibratedUnit(ManipulatorUnit):
         Starts without moving the stage, then moves the stage (unless it is fixed).
         '''
         
-        mat = self.pipetteCalHelper.calibrate(dist=self.config.pipette_diag_move)
+        mat, initPos = self.pipetteCalHelper.calibrate(dist=self.config.pipette_diag_move)
         print(f"orig mat {mat}\n\n")
         M = np.eye(3,3)
         M[0:2,0:2] = mat[:, 0:2]
@@ -383,7 +383,13 @@ class CalibratedUnit(ManipulatorUnit):
             # Store the new values
             self.M = M
             self.Minv = Minv
-            self.r0 = np.array([-self.camera.width / 2, -self.camera.height / 2, 0])
+
+            theoreticalPos = dot(self.M, self.position())
+            print(f"theory: {theoreticalPos} actual {initPos}")
+            xOff = theoreticalPos[0] - initPos[0]
+            yOff = theoreticalPos[1] - initPos[1]
+
+            self.r0 = np.array([-self.camera.width / 2 - xOff, -self.camera.height / 2 - yOff, 0])
             self.calibrated = True
             print(f"results: {self.M} {self.Minv} {self.r0}")
         else:

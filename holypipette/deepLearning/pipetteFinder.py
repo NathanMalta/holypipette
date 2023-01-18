@@ -7,7 +7,7 @@ class PipetteFinder():
 
 	def __init__(self):
 		curFile = str(Path(__file__).parent.absolute())
-		self.yoloNet = cv2.dnn.readNetFromDarknet(curFile + '/pipetteModel/pipetteFinder.cfg', curFile + '/pipetteModel/pipetteFinder.weights')
+		self.yoloNet = cv2.dnn.readNetFromONNX(curFile + '/pipetteModel/pipette.onnx')
 
 		layer_names = self.yoloNet.getLayerNames()
 		self.output_layers = [layer_names[i-1] for i in self.yoloNet.getUnconnectedOutLayers()]
@@ -26,7 +26,7 @@ class PipetteFinder():
 		height, width, _ = img.shape #color image
 
 		#run the image through the model
-		blob = cv2.dnn.blobFromImage(img, 1 / 255.0, (416, 416), swapRB=True, crop=False)
+		blob = cv2.dnn.blobFromImage(img, 1 / 255.0, (640, 640), swapRB=True, crop=False)
 		self.yoloNet.setInput(blob)
 		outs = self.yoloNet.forward(self.output_layers)
 
@@ -34,23 +34,30 @@ class PipetteFinder():
 		boxes = []
 		for out in outs:
 			for detection in out:
-				scores = detection[5:]
-				class_id = np.argmax(scores)
-				confidence = scores[class_id]
+				idx = np.argmax(detection[4, :])
+				detection = detection[:, idx]
+				x, y, width, height, objectness = tuple(detection)
+				if objectness < 0.1:
+					continue
 
-				if confidence > 0.5 and class_id == self.pipette_class:
-					# Object detected
-					center_x = int(detection[0] * width)
-					center_y = int(detection[1] * height)
-
-					boxes.append([center_x, center_y])
-					confidences.append(float(confidence))
+				center_x = x
+				center_y = y
+				boxes.append([center_x, center_y])
+				confidences.append(float(objectness))
 
 		if len(boxes) == 0:
 			return None #no pipette detected
 		
-		confidence = np.array(confidence)
-		best_x, best_y = boxes[confidence.argmax()]
+		confidences = np.array(confidences)
+		best_x, best_y = boxes[confidences.argmax()]
+
+		#model outputs pos for a 640x640 img.  rescale x,y to input image size
+		best_x = (best_x / 640) * img.shape[1]
+		best_y = (best_y / 640) * img.shape[0]
+
+		#convert to int (for opencv drawing functions)
+		best_x = int(best_x)
+		best_y = int(best_y)
 
 		return best_x, best_y
 	
@@ -61,6 +68,7 @@ if __name__ == '__main__':
 	#find pipette, draw location to img
 	start = time.time()
 	x,y = finder.find_pipette(img)
+
 	print(f'framerate: {1 / (time.time() - start)}')
 	cv2.circle(img, (x,y), 3, (0, 255, 0))
 
