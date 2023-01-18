@@ -7,6 +7,7 @@ import time
 from . import *
 import warnings
 import pco
+from holypipette.deepLearning.pipetteFinder import PipetteFinder
 
 try:
     import cv2
@@ -50,6 +51,7 @@ class PcoCamera(Camera):
 
         self.upperBound = 255
         self.lowerBound = 0
+        self.pipetteFinder = PipetteFinder()
 
         self.normalize() #normalize image on startup
 
@@ -132,15 +134,23 @@ class PcoCamera(Camera):
         if span == 0:
             span = 1 #prevent divide by 0 for blank images
 
+        img = img.astype(np.float32)
         img = img - self.lowerBound
         img = img / span
 
         #convert to 8 bit color
         img = img * 255
+        img[np.where(img < 0)] = 0
+        img[np.where(img > 255)] = 255
         img = img.astype(np.uint8)
 
         #resize if needed
         if self.width != None and self.height != None:
             img = cv2.resize(img, (self.width, self.height), interpolation= cv2.INTER_LINEAR)
+
+        if img is not None:
+            out = self.pipetteFinder.find_pipette(img)
+            if out is not None:
+                img = cv2.circle(img, out, 2, 0, 2)
 
         return img

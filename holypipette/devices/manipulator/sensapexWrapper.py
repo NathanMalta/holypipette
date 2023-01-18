@@ -59,7 +59,7 @@ class SensapexManip(Manipulator):
         x : target position in um (vector or list).
         '''
         newPos = np.empty((3,)) * np.nan
-        for i, pos, axis in enumerate(zip(x, axes)):
+        for pos, axis in zip(x, axes):
             newPos[axis-1] = pos
         self.ump.goto_pos(self.deviceID, newPos, self.max_speed, max_acceleration=self.max_acceleration)
         

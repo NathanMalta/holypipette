@@ -511,6 +511,10 @@ class CalibratedStage(CalibratedUnit):
         A large image of the mosaic.
         '''
         u0=self.position()
+        if width == None:
+            width = self.camera.width * 4
+        if height == None:
+            height = self.camera.height * 4
 
         dx, dy = self.camera.width, self.camera.height
         # Number of moves in each direction
@@ -539,6 +543,8 @@ class CalibratedStage(CalibratedUnit):
                     self.wait_until_still()
         finally: # move back to initial position
             self.absolute_move(u0)
+
+        cv2.imwrite('mosaic.png', big_image)
 
         return big_image
 

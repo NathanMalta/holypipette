@@ -44,9 +44,9 @@ class ScientificaSerial(Manipulator):
     def __del__(self):
         self.comPort.close()
 
-    def _sendCmd(self, cmd, waitForResponse = True):
+    def _sendCmd(self, cmd):
         self.comPort.write(cmd.encode())
-        time.sleep(0.05)
+        time.sleep(0.05) #TODO: replace with something better
 
         resp = self.comPort.read_until(b'\r') #read reply to message
         resp = resp[:-1]
