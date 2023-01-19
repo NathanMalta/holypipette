@@ -5,6 +5,7 @@ from holypipette.devices.manipulator.microscope import Microscope
 from holypipette.devices.manipulator import Manipulator
 from holypipette.devices.camera import Camera
 from threading import Thread
+import math
 
 class FocusHelper():
     '''A helper class to aid with microscope focusing
@@ -97,7 +98,8 @@ class FocusUpdater(Thread):
         '''continuously read frames from camera, and record their focus and the microscope's z position.  Assumes constant velocity!
         '''
         while self.isRunning:
-            while self.lastFrame == self.camera.get_frame_no():
+            while self.lastFrame == self.camera.get_frame_no() and self.isRunning:
+                # print('waiting for new frame')
                 time.sleep(0.01) #wait for a new frame to be read from the camera
             self.lastFrame = self.camera.get_frame_no()
             
@@ -147,12 +149,12 @@ class StageCalHelper():
         self.lastFrameNo : int = None
         self.frameLag = frameLag
 
-    def calibrateContinuous(self, distance):
+    def calibrateContinuous(self, distance, video=False):
         '''Tell the stage to go a certain distance at a low max speed.
            Take a bunch of pictures and run optical flow. Use optical flow information
-           to create a linear transform from stage microns to image pixels. 
+           to create a linear transform from stage microns to image pixels.
+           if set, video creates an mp4 of the optical flow running in the project directory.
         '''
-
         #move the microscope a certain distance forward and up
         currPos = self.stage.position()
         commandedPos = np.array([currPos[0] + distance, currPos[1] - distance])
@@ -181,23 +183,42 @@ class StageCalHelper():
         imgPosStagePosList = []
         x_pix_total = 0
         y_pix_total = 0
-        for i in range(len(framesAndPoses) - self.frameLag):
-            lastFrame, last_x_microns, last_y_microns = framesAndPoses[i]
-            currFrame, x_microns, y_microns = framesAndPoses[i + self.frameLag]
 
+        if video:
+            out = cv2.VideoWriter('opticalFlow.mp4', -1, 10.0, (1024,1024))
+
+        for i in range(len(framesAndPoses) - 1):
+            currFrame, x_microns, y_microns = framesAndPoses[i + 1]
+            lastFrame, last_x_microns, last_y_microns = framesAndPoses[i]
             p0 = self.calcOpticalFlowP0(lastFrame)
+
             x_pix, y_pix = self.calcOpticalFlow(lastFrame, currFrame, p0)
-            x_pix_total += x_pix / self.frameLag
-            y_pix_total += y_pix / self.frameLag
+            x_pix_total += x_pix
+            y_pix_total += y_pix
+
+            if math.isnan(x_pix) or math.isnan(y_pix): #if no corners can be found with optical flow, nan could be returned.  Don't add this to the list
+                continue
+
+            if video:
+                vidFrame = cv2.cvtColor(currFrame.copy(), cv2.COLOR_GRAY2BGR)
+                cv2.line(vidFrame, (512,512), (512 + int(x_pix_total), 512 + int(y_pix_total)), (255,0,0), 3)
+                cv2.line(vidFrame, (600,100), (600 + int(x_pix_total), 100 + int(y_pix_total)), (255,0,0), 3)
+                cv2.line(vidFrame, (900,400), (900 + int(x_pix_total), 400 + int(y_pix_total)), (255,0,0), 3)
+                out.write(vidFrame)
+
 
             imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
         imgPosStagePosList = np.array(imgPosStagePosList)
         
+
+        if video:
+            out.release()
+        
         #for some reason, estimateAffinePartial2D only works with int64
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
-        imgPosStagePosList = (imgPosStagePosList * 100).astype(np.int64) 
+        imgPosStagePosList = (imgPosStagePosList).astype(np.int64) 
+
         #compute affine transformation matrix
-        print(imgPosStagePosList)
         mat, inVsOut = cv2.estimateAffinePartial2D(imgPosStagePosList[:,2:4], imgPosStagePosList[:,0:2])
 
         #fix intercept - set image center --> stage center
@@ -214,17 +235,17 @@ class StageCalHelper():
         #params for corner detector
         feature_params = dict(maxCorners = 100,
                                 qualityLevel = 0.5,
-                                minDistance = 7,
-                                blockSize = 7)
+                                minDistance = 10,
+                                blockSize = 10)
         p0 = cv2.goodFeaturesToTrack(firstFrame, mask = None, **feature_params)
         return p0
 
 
     def calcOpticalFlow(self, lastFrame, currFrame, p0):
         #params for optical flow
-        lk_params = dict(winSize  = (30, 30),
-                    maxLevel = 8,
-                    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+        lk_params = dict(winSize  = (20, 20),
+                    maxLevel = 15,
+                    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100, 0.03))
 
         # calculate optical flow from first frame
         p1, st, err = cv2.calcOpticalFlowPyrLK(lastFrame, currFrame, p0, None, **lk_params)
@@ -249,6 +270,7 @@ class StageCalHelper():
         # self.stage.set_max_accel(10)
 
         initPos = self.stage.position()
+        print('starting optical flow')
         mat = self.calibrateContinuous(dist)
         # commandedPos = np.array([initPos[0] + 200, initPos[1] - 200])
         # axes = np.array([0, 1], dtype=int)
