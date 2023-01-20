@@ -37,7 +37,7 @@ class PipetteFinder():
 				idx = np.argmax(detection[4, :])
 				detection = detection[:, idx]
 				x, y, width, height, objectness = tuple(detection)
-				if objectness < 0.05:
+				if objectness < 0.20:
 					continue
 
 				center_x = x

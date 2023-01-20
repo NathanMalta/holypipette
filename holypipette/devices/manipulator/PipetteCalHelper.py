@@ -11,7 +11,7 @@ class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 1000
+    CAL_MAX_SPEED = 100
     NORMAL_MAX_SPEED = 10000
 
     def __init__(self, pipette: Manipulator, camera: Camera):
@@ -42,7 +42,7 @@ class PipetteCalHelper():
 
         #wait for the pipette to reach the pos. Record frames and pos as the pipette moves
         currPos = self.pipette.position()
-        while abs(currPos[0] - commandedPos[0]) > 0.3 or abs(currPos[1] - commandedPos[1]) > 0.3:
+        while abs(currPos[0] - commandedPos[0]) > 1 or abs(currPos[1] - commandedPos[1]) > 1:
             while self.lastFrameNo == self.camera.get_frame_no():
                 time.sleep(0.01) #wait for a new frame to be read from the camera
             self.lastFrameNo = self.camera.get_frame_no()
@@ -51,6 +51,7 @@ class PipetteCalHelper():
             #get latest img and pipette pos, add to arr
             _, _, _, frame = self.camera._last_frame_queue[0]
             framesAndPoses.append((frame, currPos))
+            print(f"haven't reached yet... {currPos} {commandedPos}")
 
         #find the pipette in all the frames
         pixelsAndPoses = []

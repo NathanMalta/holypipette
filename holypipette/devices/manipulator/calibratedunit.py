@@ -51,9 +51,9 @@ class CalibrationConfig(Config):
                                      doc='number of frames between for computing change with optical flow',
                                      bounds=(1, 20))
     
-    pipette_diag_move = NumberWithUnit(300, unit='um',
+    pipette_diag_move = NumberWithUnit(200, unit='um',
                                      doc='x, y dist to move for pipette cal.',
-                                     bounds=(100, 10000))
+                                     bounds=(50, 10000))
     
 
     categories = [('Stage Calibration', ['autofocus_dist', 'stage_diag_move', 'frame_lag']),
