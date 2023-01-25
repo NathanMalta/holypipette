@@ -11,7 +11,7 @@ class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 100
+    CAL_MAX_SPEED = 1000
     NORMAL_MAX_SPEED = 10000
 
     def __init__(self, pipette: Manipulator, camera: Camera):
@@ -89,6 +89,7 @@ class PipetteCalHelper():
         mat = self.calibrateContinuous(dist)
         
         self.pipette.set_max_speed(self.NORMAL_MAX_SPEED)
+        self.pipette.wait_until_still()
         self.pipette.absolute_move_group(initPos, [0,1,2])
         self.pipette.wait_until_still()
 

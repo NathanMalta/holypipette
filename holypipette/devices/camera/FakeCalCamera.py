@@ -1,23 +1,25 @@
-from holypipette.devices.manipulator import Manipulator
+from holypipette.devices.manipulator import Manipulator, FakeManipulator
 from .camera import Camera
 import numpy as np
 import cv2
 from pathlib import Path
 import time
+import math
 
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 
 class FakeCalCamera(Camera):
-    def __init__(self, manipulator=None, image_z=0, targetFramerate=40):
+    def __init__(self, stageManip=None, pipetteManip=None, image_z=0, targetFramerate=40):
         super(FakeCalCamera, self).__init__()
         self.width : int = 1024
         self.height : int = 1024
         self.exposure_time : int = 30
-        self.manipulator : Manipulator = manipulator
+        self.stageManip : Manipulator = stageManip
+        self.pipetteManip : Manipulator = pipetteManip
         self.image_z : float = image_z
         self.pixels_per_micron : float = 1.25  # pixels / micrometers
         self.frameno : int = 0
-        self.pipette = FakePipette(self.manipulator, self.pixels_per_micron)
+        self.pipette = FakePipette(self.pipetteManip, self.pixels_per_micron)
         self.targetFramerate = 40
 
         #create checkerboard pattern on smaller image
@@ -81,7 +83,7 @@ class FakeCalCamera(Camera):
         '''
         start = time.time()
         # Use the part of the image under the microscope
-        stage_x, stage_y, stage_z = self.manipulator.position_group([4, 5, 6])
+        stage_x, stage_y, stage_z = self.stageManip.position_group([1, 2, 3])
 
         #get background at current stage position
         img_x = -stage_x * self.pixels_per_micron
@@ -97,7 +99,7 @@ class FakeCalCamera(Camera):
         frame = Image.fromarray(frame)
 
         #add pipette to image
-        frame = self.pipette.add_pipette_to_img(frame)
+        frame = self.pipette.add_pipette_to_img(frame, [stage_x, stage_y, stage_z])
 
         #add noise, exposure
         exposure_factor = self.exposure_time/30.
@@ -113,11 +115,110 @@ class FakeCalCamera(Camera):
         
         return frame
 
+class FakePipetteManipulator(FakeManipulator):
+    def __init__(self, min=None, max=None, armAngle=np.pi/6):
+        super(FakePipetteManipulator, self).__init__(min, max)
+        self.armAngle = armAngle
+
+        self.raw_to_real_mat  = np.array([[np.cos(self.armAngle), 0, 0], 
+                                          [0, 1, 0], 
+                                          [-np.sin(self.armAngle), 0, 1]], dtype=np.float32)
+
+        self.real_to_raw_mat = np.linalg.inv(self.raw_to_real_mat)
+
+
+    def raw_to_real(self, raw_pos : np.ndarray):
+        raw_pos = raw_pos.copy()
+        # raw_pos[0] = raw_pos[0] * np.cos(self.armAngle)
+        real_pos = np.matmul(self.raw_to_real_mat, np.array(raw_pos).T)
+        return real_pos
+
+    def real_to_raw(self, real_pos : np.ndarray):
+        real_pos = real_pos.copy()
+        raw_pos = np.matmul(self.real_to_raw_mat, np.array(real_pos).T)
+        return raw_pos
+
+    def position(self, axis=None):
+        raw_pos = self.raw_position()
+        real_pos = self.raw_to_real(raw_pos)
+        
+        if axis == None:
+            return real_pos
+        else:
+            return real_pos[axis-1]
+
+    def raw_position(self, axis=None):
+        return super().position(axis).copy()
+
+    def absolute_move(self, x, axis):
+        # print(f"Moving axis {axis} to {x}\t{self.position()}\t{self.raw_position()}")
+        new_setpoint_raw = np.empty((3,)) * np.nan
+        if axis == 1:
+            #we're dealing with the 'virtual' d-axis
+            new_setpoint_raw = self.raw_position()
+            curr_pos_real = self.position()
+            dx = x - curr_pos_real[0]
+            dVect = self.real_to_raw(np.array([dx, 0, 0]))
+            new_setpoint_raw += dVect
+        elif axis == 3:
+            #we're dealing with z - needs to be handeled based on offset
+            new_setpoint_raw = self.raw_position()
+            curr_pos_real = self.position()
+            dz = x - curr_pos_real[2]
+            dVect = self.real_to_raw(np.array([0, 0, dz]))
+            new_setpoint_raw += dVect
+        else:
+            #we're dealing with a physical axis, it can be commanded directly
+            new_setpoint_raw[axis-1] = x
+
+        for pos, axis in zip(new_setpoint_raw, range(3)):
+            if not np.isnan(pos):
+                super().absolute_move(pos, axis+1)
+
+    def absolute_move_group(self, x, axes):
+        new_setpoint_raw = self.raw_position()
+        curr_pos_real = self.position()
+        x = np.array(x)
+        axes = np.array(axes)
+
+        if 1 in axes:
+            #we're dealing with the 'virtual' d-axis
+            indx = np.where(axes == 1)[0][0]
+            dx = x[indx] - curr_pos_real[0]
+            dVect = self.real_to_raw(np.array([dx, 0, 0]))
+            new_setpoint_raw += dVect
+        if 2 in axes:
+            indy = np.where(axes == 2)[0][0]
+            dy = x[indy] - curr_pos_real[1]
+            new_setpoint_raw[1] += dy
+        if 3 in axes:
+            #we're dealing with z - needs to be handeled based on offset
+            indz = np.where(axes == 3)[0][0]
+            dz = x[indz] - curr_pos_real[2]
+            dVect = self.real_to_raw(np.array([0, 0, dz]))
+            new_setpoint_raw += dVect
+        
+        for x,i in zip(new_setpoint_raw, range(3)):
+            print(f"Moving axis {i+1} to {x}\t{self.position()}\t{self.raw_position()}")
+            super().absolute_move(x, i+1)
+
 class FakePipette():
 
-    def __init__(self, manipulator:Manipulator, microscope_pixels_per_micron, stage_to_pipette=np.eye(4,4)):
+    def __init__(self, manipulator:Manipulator, microscope_pixels_per_micron, stage_to_pipette=np.eye(4,4), pipetteAngle=np.pi/6):
 
-        stage_to_pipette = np.array([[0.7, -0.1, 0, 0], [0.1, 0.7, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+        stage_to_pipette = np.array([[0.7, -0.3, 0, 0], [0.3, 0.7, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+
+        # rotation matrix to make the x-axis to parallel to the pipette, rather than the stage
+        # note: this is the rotation matrix about the y-axis, but only rotating the x axis (not z)
+        # creates a non-orthogonal coordinate system, but that's the same as the real pipette  
+        self.rot_mat  = np.array([[np.cos(pipetteAngle), 0, 0, 0], 
+                            [0, 1, 0, 0], 
+                            [-np.sin(pipetteAngle), 0, 1, 0], 
+                            [0, 0, 0, 1]])
+
+        stage_to_pipette = np.matmul(np.linalg.inv(self.rot_mat), stage_to_pipette)
+
+        
         self.manipulator = manipulator
         self.pixels_per_micron = microscope_pixels_per_micron
         self.stage_to_pipette = stage_to_pipette #homoegeneous transform matrix from stage to pipette
@@ -134,16 +235,18 @@ class FakePipette():
         filter = ImageEnhance.Brightness(self.pipetteImg)
         self.alphaMask = filter.enhance(1.5)
         
-    def add_pipette_to_img(self, frame:Image):
+    def add_pipette_to_img(self, frame:Image, stagePos:list):
+
+        # print(self.manipulator.position(), self.manipulator.raw_position())
         #get stage micron coords
-        stage_x, stage_y, stage_z = self.manipulator.position_group([4, 5, 6])
+        stage_x, stage_y, stage_z = stagePos
 
         #get stage pixel coords
         stage_img_x = stage_x * self.pixels_per_micron
         stage_img_y = stage_y * self.pixels_per_micron
 
         #get pipette micron coords
-        pipette_x, pipette_y, pipette_z = self.manipulator.position_group([1, 2, 3])
+        pipette_x, pipette_y, pipette_z = self.manipulator.raw_position()
         pipette_pos_h = np.array([pipette_x, pipette_y, pipette_z, 1])
 
         #get pipette position in stage coordinates
@@ -158,7 +261,7 @@ class FakePipette():
         pipette_img_y = int(pipette_pos_img_coords[1] - stage_img_y)
 
         #blur pipette proportionally to distance between stage_z and pipette_z
-        focusFactor = abs(stage_z - pipette_z) / 10
+        focusFactor = abs(stage_z - pipette_pos_stage_coords[2]) / 10
         if focusFactor == 0:
             focusFactor = 0.1 #resolve divide by 0 error
 

@@ -12,34 +12,29 @@ import math
 
 __all__ = ['FakeManipulator']
 
-# TODO: Move in 3D
 class FakeManipulator(Manipulator):
-    def __init__(self, min=None, max=None, angle=25.):
+    def __init__(self, min=None, max=None):
         Manipulator.__init__(self)
-        self.x = zeros(6) # Position of all axes
         # Minimum and maximum positions for all axes
         self.min = min
         self.max = max
-        if (any([min is not None, max is not None]) and
-                not all([min is not None, max is not None])):
-            raise ValueError('Need to provide either both minimum and maximum '
-                             'range or neither')
         if all([min is not None, max is not None]):
-            if len(min) != 6 or len(max) != 6:
-                raise ValueError('min/max argument needs to be a vector of '
-                                 'length 6.')
-        self.angle = angle*pi/180
+            if len(min) != len(max):
+                raise ValueError('min/max needs to be the same length (# of axes)')
+
+        self.num_axes = len(min)
 
         #continuous movement values
+        self.x = zeros(self.num_axes) # Position of all axes
         self.set_max_speed(10000)
         self.setpoint = self.x.copy()
-        self.speeds = zeros(6)
-        self.cmd_time = [None] * 6
+        self.speeds = zeros(self.num_axes)
+        self.cmd_time = [None] * self.num_axes
 
     def set_max_speed(self, speed : int):
         self.max_speed = speed / 1000 * 82 #for some reason, when you specify 1000 as the max speed, it actually moves at 82 um/s
 
-    def position(self, axis):
+    def position(self, axis=None):
         '''
         Current position along an axis.
 
@@ -52,8 +47,13 @@ class FakeManipulator(Manipulator):
         The current position of the device axis in um.
         '''
 
-        self.update_axis(axis)
-        return self.x[axis-1]
+        if axis == None:
+            for i in range(self.num_axes):
+                self.update_axis(i+1)
+            return self.x
+        else:
+            self.update_axis(axis)
+            return self.x[axis-1]
 
     def update_axis(self, axis):
         '''Updates the position on the given axis if a command is being executed.
@@ -95,21 +95,28 @@ class FakeManipulator(Manipulator):
         '''
 
         if self.update_axis(axis):
+            print(f'axis: {axis}\tpos: {self.x[axis-1]}\tspeed: {self.x[axis-1]:.2f}\tsetpoint: {self.setpoint[axis-1]}\tfail 1')
             raise RuntimeError("Cannot move while another command is running")
+        else:
+            print(f'passed axis {axis}')
 
         if self.min is None:
             self.setpoint[axis-1] = x
         else:
             self.setpoint[axis-1] = clip(x, self.min[axis-1], self.max[axis-1])
         
+        print('setpoint: ', self.setpoint[axis-1])
+        
         self.cmd_time[axis-1] = time.time()
         self.speeds[axis-1] = self.max_speed * math.copysign(1, x - self.x[axis-1])
 
-        print(f'moving to {x} at {self.speeds[axis-1]} um/s current pos: {self.x[axis-1]}')
 
-        # if 1 <= axis <= 3:
-        #     self.debug(f'Pipette Moving To: {self.setpoint[:3]}')
-        # elif 4 <= axis <= 6:
-        #     self.debug(f'Stage Moving To: {self.setpoint[3:]}')
-        # else:
-        #     self.debug(f"moving unknown axis: {axis}")
+    def absolute_move_group(self, x, axes):
+        for xi,axis in zip(x,axes):
+            print(axis, xi)
+            self.absolute_move(xi, axis)
+    
+    def wait_until_still(self, axes=None):
+        for i in range(self.num_axes):
+            while self.update_axis(i+1):
+                time.sleep(0.1)

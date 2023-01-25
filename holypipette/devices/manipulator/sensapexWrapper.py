@@ -25,97 +25,84 @@ class SensapexManip(Manipulator):
         self.max_acceleration = 20 # "feels good" default value
         self.armAngle = math.radians(self._get_axis_angle())
 
-    def position(self, axis):
-        '''
-        Current position along an axis.
+        self.raw_to_real_mat  = np.array([[np.cos(self.armAngle), 0, 0], 
+                                          [0, 1, 0], 
+                                          [-np.sin(self.armAngle), 0, 1]], dtype=np.float32)
 
-        Parameters
-        ----------
-        axis : axis number
+        self.real_to_raw_mat = np.linalg.inv(self.raw_to_real_mat)
 
-        Returns
-        -------
-        The current position of the device axis in um.
-        '''
-        pos = self.ump.get_pos(self.deviceID, timeout=1)
-        pos[0] = pos[0] * math.cos(self.armAngle) #convert to "virtual" x-axis, parallel to the cover slip
+    def raw_to_real(self, raw_pos : np.ndarray):
+        raw_pos = raw_pos.copy()
+        real_pos = np.matmul(self.raw_to_real_mat, np.array(raw_pos).T)
+        return real_pos
+
+    def real_to_raw(self, real_pos : np.ndarray):
+        real_pos = real_pos.copy()
+        raw_pos = np.matmul(self.real_to_raw_mat, np.array(real_pos).T)
+        return raw_pos
+
+    def position(self, axis=None):
+        raw_pos = self.raw_position()
+        real_pos = self.raw_to_real(raw_pos)
         
         if axis == None:
-            return pos
+            return real_pos
         else:
-            return pos[axis-1]
+            return real_pos[axis-1]
+
+    def raw_position(self, axis=None):
+        return self.ump.get_pos(self.deviceID, timeout=1)
 
     def absolute_move(self, x, axis):
-        '''
-        Moves the device axis to position x.
-
-        Parameters
-        ----------
-        axis: axis number
-        x : target position in um.
-        '''
-        newPos = np.empty((3,)) * np.nan
+        # print(f"Moving axis {axis} to {x}\t{self.position()}\t{self.raw_position()}")
+        new_setpoint_raw = np.empty((3,)) * np.nan
         if axis == 1:
             #we're dealing with the 'virtual' d-axis
-            newPos = self.ump.get_pos(self.deviceID, timeout=1)
-            currD = newPos[0] * math.cos(self.armAngle)
-            print(f'curr d: {currD} desired D: {x}')
-            dD = currD - x
-            print(f'dx: {dD / math.cos(self.armAngle)}\t dz: {-dD * math.tan(self.armAngle)}')
-
-            newPos[0] += dD / math.cos(self.armAngle)
-            newPos[2] += -dD * math.tan(self.armAngle)
+            new_setpoint_raw = self.raw_position()
+            curr_pos_real = self.position()
+            dx = x - curr_pos_real[0]
+            dVect = self.real_to_raw(np.array([dx, 0, 0]))
+            new_setpoint_raw += dVect
+        elif axis == 3:
+            #we're dealing with z - needs to be handeled based on offset
+            new_setpoint_raw = self.raw_position()
+            curr_pos_real = self.position()
+            dz = x - curr_pos_real[2]
+            dVect = self.real_to_raw(np.array([0, 0, dz]))
+            new_setpoint_raw += dVect
         else:
             #we're dealing with a physical axis, it can be commanded directly
-            newPos[axis-1] = x
-        
-        print(f'moving to {newPos}')
+            new_setpoint_raw[axis-1] = x
 
-        self.ump.goto_pos(self.deviceID, newPos, self.max_speed, max_acceleration=self.max_acceleration)
+        self.ump.goto_pos(self.deviceID, new_setpoint_raw, self.max_speed, max_acceleration=self.max_acceleration)
+
 
     def absolute_move_group(self, x, axes):
-        '''
-        Moves the device group of axes to position x.
+        new_setpoint_raw = self.raw_position()
+        curr_pos_real = self.position()
+        x = np.array(x)
+        axes = np.array(axes)
 
-        Parameters
-        ----------
-        axes : list of axis numbers
-        x : target position in um (vector or list).
-        '''
-        newPos = self.ump.get_pos(self.deviceID, timeout=1)
-        currPos = newPos.copy()
         if 1 in axes:
-            indx = list(axes).index(1)
-            dx = x[indx] - currPos[0]
-            #handle virtual axis
-            newPos[0] += dx / math.cos(self.armAngle)
-            newPos[2] += -dx * math.tan(self.armAngle)
-
-        for pos, axis in zip(x, axes):
-            if axis == 1:
-                continue #we already handled this case.
-            
-            dPos = currPos[axis-1] - pos
-            newPos[axis-1] += dPos
-
-        print(x, axes, newPos, self.ump.get_pos(self.deviceID, timeout=1), currPos)
-        self.ump.goto_pos(self.deviceID, newPos, self.max_speed, max_acceleration=self.max_acceleration)
+            #we're dealing with the 'virtual' d-axis
+            indx = np.where(axes == 1)[0][0]
+            dx = x[indx] - curr_pos_real[0]
+            dVect = self.real_to_raw(np.array([dx, 0, 0]))
+            new_setpoint_raw += dVect
+        if 2 in axes:
+            indy = np.where(axes == 2)[0][0]
+            dy = x[indy] - curr_pos_real[1]
+            new_setpoint_raw[1] += dy
+        if 3 in axes:
+            #we're dealing with z - needs to be handeled based on offset
+            indz = np.where(axes == 3)[0][0]
+            dz = x[indz] - curr_pos_real[2]
+            dVect = self.real_to_raw(np.array([0, 0, dz]))
+            new_setpoint_raw += dVect
         
+        self.ump.goto_pos(self.deviceID, new_setpoint_raw, self.max_speed, max_acceleration=self.max_acceleration)
 
-    def position_group(self, axes):
-        '''
-        Current position along a group of axes.
-
-        Parameters
-        ----------
-        axes : list of axis numbers
-
-        Returns
-        -------
-        The current position of the device axis in um (vector).
-        '''
-        return np.array(self.ump.get_pos(self.deviceID, timeout=1))[np.array(axes)-1]
-
+        
     def stop(self, axis):
         """
         Stops current movements.

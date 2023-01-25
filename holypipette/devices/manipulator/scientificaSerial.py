@@ -63,7 +63,7 @@ class ScientificaSerial(Manipulator):
             zpos = self._sendCmd(SerialCommands.GET_Z_POS)
             return int(zpos) / 10.0
         if axis == None:
-            xyz = self._sendCmd(SerialCommands.GET_X_Y_Z)
+            xyz = self._sendCmd(SerialCommands.GET_X_Y_Z).split(b'\t')
             
             xPos = int(xyz[0]) / 10.0
             yPos = int(xyz[1]) / 10.0
