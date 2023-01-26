@@ -155,8 +155,8 @@ class CalibratedUnit(ManipulatorUnit):
         -------
         The current position in um as an XYZ vector.
         '''
-        if not self.calibrated:
-            raise CalibrationError
+        # if not self.calibrated:
+        #     raise CalibrationError
         u = self.position() # position vector in manipulator unit system
 
         return dot(self.M, u) + self.r0 + self.stage.reference_position()
@@ -206,26 +206,29 @@ class CalibratedUnit(ManipulatorUnit):
         if np.isnan(np.array(r)).any():
             raise RuntimeError("can not move to nan location.")
         
-        if not self.calibrated:
-            raise CalibrationError
-        u = dot(self.Minv, r-self.stage.reference_position()-self.r0)
-        if safe:
-            z0 = self.position(axis=2)
-            z = u[2]
-            if (z-z0)*self.up_direction[2]>0: # going up
-                # Go up first
-                self.absolute_move(z,axis=2)
-                self.wait_until_still(2)
-                self.absolute_move(u)
-            else: # going down
-                # Go down first
-                uprime = u.copy()
-                u[2] = z0
-                self.absolute_move(uprime)
-                self.wait_until_still()
-                self.absolute_move(z,axis=2)
-        else:
-            self.absolute_move(u)
+        # if not self.calibrated:
+        #     raise CalibrationError
+        print(f'inv: {self.Minv} {r-self.r0}')
+        u = dot(self.Minv, r-self.r0)
+        print(f'from: {r} going to {u}')
+        print(f'u: {u} {r} {self.stage.reference_position()} {self.r0}')
+        # if safe:
+        #     z0 = self.position(axis=2)
+        #     z = u[2]
+        #     if (z-z0)*self.up_direction[2]>0: # going up
+        #         # Go up first
+        #         self.absolute_move(z,axis=2)
+        #         self.wait_until_still(2)
+        #         self.absolute_move(u)
+        #     else: # going down
+        #         # Go down first
+        #         uprime = u.copy()
+        #         u[2] = z0
+        #         self.absolute_move(uprime)
+        #         self.wait_until_still()
+        #         self.absolute_move(z,axis=2)
+        # else:
+        self.absolute_move(u)
 
     def reference_relative_move(self, r):
         '''
@@ -307,7 +310,8 @@ class CalibratedUnit(ManipulatorUnit):
         #     self.microscope.wait_until_still()
 
         # Final move
-        self.reference_move(r + withdraw * p * self.up_direction[0], safe = True) # Or relative move in manipulator coordinates, first axis (faster)
+        print(f'sending reference: {r} {withdraw} {p} {self.up_direction[0]}')
+        self.reference_move(r, safe = True) # Or relative move in manipulator coordinates, first axis (faster)
 
 
     def pixel_per_um(self, M=None):
@@ -383,13 +387,16 @@ class CalibratedUnit(ManipulatorUnit):
             # Store the new values
             self.M = M
             self.Minv = Minv
+            print(self.M)
 
-            theoreticalPos = dot(self.M, self.position())
-            print(f"theory: {theoreticalPos} actual {initPos}")
+            theoreticalPos = dot(self.M, self.position())[:2] + mat[:, 2]
+            print(f"theory: {theoreticalPos} actual {initPos} off {mat[:, 2]} yeild: {theoreticalPos[:2] }")
+
+            # self.r0 = np.append(mat[:, 2], self.microscope.position() - self.position(2))
             xOff = theoreticalPos[0] - initPos[0]
             yOff = theoreticalPos[1] - initPos[1]
+            self.r0 = np.array([-self.camera.width / 2 - xOff, -self.camera.height / 2 - yOff, self.microscope.position() - self.position(2)])
 
-            self.r0 = np.array([-self.camera.width / 2 - xOff, -self.camera.height / 2 - yOff, 0])
             self.calibrated = True
             print(f"results: {self.M} {self.Minv} {self.r0}")
         else:

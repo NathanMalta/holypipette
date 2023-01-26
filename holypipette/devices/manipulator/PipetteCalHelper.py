@@ -11,7 +11,7 @@ class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 1000
+    CAL_MAX_SPEED = 40
     NORMAL_MAX_SPEED = 10000
 
     def __init__(self, pipette: Manipulator, camera: Camera):
@@ -34,15 +34,28 @@ class PipetteCalHelper():
 
         #move the pipette a certain distance forward and up
         currPos = self.pipette.position()
-        commandedPos = np.array([currPos[0] + distance, currPos[1] + distance])
-        axes = np.array([0, 1], dtype=int)
-        self.pipette.absolute_move_group(commandedPos, axes)
+        cmd1 = np.array([currPos[0], currPos[1] + distance])
+        cmd2 = np.array([currPos[0], currPos[1]])
+        cmd3 = np.array([currPos[0] + distance, currPos[1]])
+        axes = np.array([1, 2], dtype=int)
+        # self.pipette.absolute_move_group(cmd1, axes)
+        self.pipette.absolute_move(cmd1[1], 1)
+        
+        cmd = 1
 
         framesAndPoses = []
 
         #wait for the pipette to reach the pos. Record frames and pos as the pipette moves
         currPos = self.pipette.position()
-        while abs(currPos[0] - commandedPos[0]) > 1 or abs(currPos[1] - commandedPos[1]) > 1:
+        while cmd != 3 or abs(currPos[0] - cmd3[0]) > 1 or abs(currPos[1] - cmd3[1]) > 1:
+            if cmd == 1 and abs(currPos[0] - cmd1[0]) < 1 and abs(currPos[1] - cmd1[1]) < 1:
+                cmd += 1
+                self.pipette.absolute_move(cmd2[1], 1)
+            if cmd == 2 and abs(currPos[0] - cmd2[0]) < 1 and abs(currPos[1] - cmd2[1]) < 1:
+                cmd += 1
+                self.pipette.absolute_move(cmd3[0], 0)
+
+
             while self.lastFrameNo == self.camera.get_frame_no():
                 time.sleep(0.01) #wait for a new frame to be read from the camera
             self.lastFrameNo = self.camera.get_frame_no()
@@ -51,7 +64,12 @@ class PipetteCalHelper():
             #get latest img and pipette pos, add to arr
             _, _, _, frame = self.camera._last_frame_queue[0]
             framesAndPoses.append((frame, currPos))
-            print(f"haven't reached yet... {currPos} {commandedPos}")
+            if cmd == 1:
+                print(f"haven't reached yet... {currPos} {cmd1}")
+            if cmd == 2:
+                print(f"haven't reached yet... {currPos} {cmd2}")
+            if cmd == 3:
+                print(f"haven't reached yet... {currPos} {cmd3}")
 
         #find the pipette in all the frames
         pixelsAndPoses = []
@@ -67,6 +85,7 @@ class PipetteCalHelper():
         #for some reason, estimateAffinePartial2D only works with int64
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
         pixelsAndPoses = (pixelsAndPoses.copy()).astype(np.int64) 
+        print(pixelsAndPoses)
         #compute affine transformation matrix
         mat, _ = cv2.estimateAffinePartial2D(pixelsAndPoses[:,2:4], pixelsAndPoses[:,0:2])
 

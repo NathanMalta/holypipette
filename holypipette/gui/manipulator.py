@@ -71,7 +71,7 @@ class ManipulatorGui(CameraGui):
         painter.setPen(pen)
         painter.setFont(QFont("Arial", int(pixmap.height()/20)))
         c_x, c_y = pixmap.width() *19.0 / 20, pixmap.height() * 19.0 / 20
-        painter.drawText(c_x, c_y, str(self.interface.current_unit+1))
+        painter.drawText(int(c_x), int(c_y), str(self.interface.current_unit+1))
 
     def draw_scale_bar(self, pixmap, text=True, autoscale=True,
                        position=True):
@@ -108,7 +108,9 @@ class ManipulatorGui(CameraGui):
             pen.setWidth(pen_width)
             painter.setPen(pen)
             c_x, c_y = pixmap.width() / 20, pixmap.height() * 19.0 / 20
-            painter.drawLine(c_x, c_y,
+            c_x = int(c_x)
+            c_y = int(c_y)
+            painter.drawLine(int(c_x), c_y,
                              int(c_x + round(length_in_um*scaled_length)), c_y)
             if text:
                 painter.drawText(c_x, c_y - 10, '{}µm'.format(length_in_um))
@@ -287,7 +289,7 @@ class ManipulatorGui(CameraGui):
                 height = 20 * pixel_per_um / scale
                 painter.translate(x / scale, y / scale)
 
-                painter.drawRect(-width / 2, -height / 2, width, height)
+                painter.drawRect(-int(width / 2), -int(height / 2), int(width), int(height))
             painter.end()
 
             # Display for just one second

@@ -51,7 +51,7 @@ class PcoCamera(Camera):
 
         self.upperBound = 255
         self.lowerBound = 0
-        # self.pipetteFinder = PipetteFinder()
+        self.pipetteFinder = PipetteFinder()
 
         self.normalize() #normalize image on startup
 
@@ -149,9 +149,9 @@ class PcoCamera(Camera):
         if self.width != None and self.height != None:
             img = cv2.resize(img, (self.width, self.height), interpolation= cv2.INTER_LINEAR)
 
-        # if img is not None:
-        #     out = self.pipetteFinder.find_pipette(img)
-        #     if out is not None:
-        #         img = cv2.circle(img, out, 2, 0, 2)
+        if img is not None:
+            out = self.pipetteFinder.find_pipette(img)
+            if out is not None:
+                img = cv2.circle(img, out, 2, 0, 2)
 
         return img

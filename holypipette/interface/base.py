@@ -5,6 +5,7 @@ GUI and `.TaskController` objects.
 import functools
 import textwrap
 import collections
+from collections.abc import Sequence
 from types import MethodType
 
 from PyQt5 import QtCore
@@ -274,7 +275,7 @@ class TaskInterface(QtCore.QObject, LoggingObject):
             after a failed/aborted task. Note that it can be easier to pass a
             list of functions instead.
         """
-        if not isinstance(task, collections.Sequence):
+        if not isinstance(task, Sequence):
             task = [task]
             argument = [argument]
         if argument is None:

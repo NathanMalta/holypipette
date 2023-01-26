@@ -21,9 +21,9 @@ class SensapexManip(Manipulator):
         else:
             self.deviceID = deviceID
 
-        self.max_speed = 10 # "feels good" default value
+        self.max_speed = 1000 # "feels good" default value
         self.max_acceleration = 20 # "feels good" default value
-        self.armAngle = math.radians(self._get_axis_angle())
+        self.armAngle = math.radians(-self._get_axis_angle())
 
         self.raw_to_real_mat  = np.array([[np.cos(self.armAngle), 0, 0], 
                                           [0, 1, 0], 
@@ -74,33 +74,39 @@ class SensapexManip(Manipulator):
             #we're dealing with a physical axis, it can be commanded directly
             new_setpoint_raw[axis-1] = x
 
-        self.ump.goto_pos(self.deviceID, new_setpoint_raw, self.max_speed, max_acceleration=self.max_acceleration)
+        print('move', new_setpoint_raw, self.raw_position())
+        self.ump.goto_pos(self.deviceID, new_setpoint_raw, self.max_speed, max_acceleration=self.max_acceleration, linear=True)
 
 
-    def absolute_move_group(self, x, axes):
-        new_setpoint_raw = self.raw_position()
-        curr_pos_real = self.position()
-        x = np.array(x)
-        axes = np.array(axes)
+    # def absolute_move_group(self, x, axes):
+    #     new_setpoint_raw = self.raw_position()
+    #     curr_pos_real = self.position()
+    #     print(f'curr pos {curr_pos_real} req: {x}')
+    #     x = np.array(x)
+    #     axes = np.array(axes)
 
-        if 1 in axes:
-            #we're dealing with the 'virtual' d-axis
-            indx = np.where(axes == 1)[0][0]
-            dx = x[indx] - curr_pos_real[0]
-            dVect = self.real_to_raw(np.array([dx, 0, 0]))
-            new_setpoint_raw += dVect
-        if 2 in axes:
-            indy = np.where(axes == 2)[0][0]
-            dy = x[indy] - curr_pos_real[1]
-            new_setpoint_raw[1] += dy
-        if 3 in axes:
-            #we're dealing with z - needs to be handeled based on offset
-            indz = np.where(axes == 3)[0][0]
-            dz = x[indz] - curr_pos_real[2]
-            dVect = self.real_to_raw(np.array([0, 0, dz]))
-            new_setpoint_raw += dVect
-        
-        self.ump.goto_pos(self.deviceID, new_setpoint_raw, self.max_speed, max_acceleration=self.max_acceleration)
+    #     if 1 in axes:
+    #         #we're dealing with the 'virtual' d-axis
+    #         indx = np.where(axes == 1)[0][0]
+    #         dx = x[indx] - curr_pos_real[0]
+    #         print('dx2', dx)
+    #         dVect = self.real_to_raw(np.array([dx, 0, 0]))
+    #         new_setpoint_raw += dVect
+    #     if 2 in axes:
+    #         indy = np.where(axes == 2)[0][0]
+    #         dy = x[indy] - curr_pos_real[1]
+    #         print('dy2', dy)
+    #         new_setpoint_raw[1] += dy
+    #     if 3 in axes:
+    #         #we're dealing with z - needs to be handeled based on offset
+    #         indz = np.where(axes == 3)[0][0]
+    #         dz = x[indz] - curr_pos_real[2]
+    #         print('dz2', dz)
+    #         dVect = self.real_to_raw(np.array([0, 0, dz]))
+    #         new_setpoint_raw += dVect
+
+    #     print('move group', new_setpoint_raw, self.raw_position())
+    #     self.ump.goto_pos(self.deviceID, new_setpoint_raw, self.max_speed, max_acceleration=self.max_acceleration, linear=True)
 
         
     def stop(self, axis):
