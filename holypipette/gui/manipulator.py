@@ -12,6 +12,7 @@ from holypipette.gui import CameraGui
 from holypipette.interface import command, blocking_command
 from holypipette.devices.manipulator.calibratedunit import CalibrationError
 import datetime
+import cv2
 
 class ManipulatorGui(CameraGui):
 
@@ -45,6 +46,9 @@ class ManipulatorGui(CameraGui):
         # Stage position for display
         self._last_stage_measurement = None
         self._stage_position = (None, None, None)
+
+        #number of images we've saved so far.  Allows images to have different names
+        self.image_save_number = 0
 
     @command(category='Manipulators',
              description='Measure manipulator ranges')
@@ -190,6 +194,10 @@ class ManipulatorGui(CameraGui):
                                          self.interface.move_pipette_z,
                                          argument=-distance, default_doc=False)
 
+        #save image command
+        self.register_key_action(Qt.Key_I, Qt.NoModifier,
+                                 self.save_image)
+
         # Show the tip
         self.register_key_action(Qt.Key_T, Qt.NoModifier,
                                  self.show_tip_switch)
@@ -295,6 +303,18 @@ class ManipulatorGui(CameraGui):
             # Display for just one second
             if time.time()>self.tip_t0+1.:
                 self.show_tip_on = False
+    
+    @command(category='Camera',
+             description='Save the current image to the outputs folder')
+    def save_image(self):
+        #get the current image
+        _, _, _, currImg = self.camera._last_frame_queue[0]
+
+        #save the image
+        cv2.imwrite(f'outputs/{self.image_save_number}.png', currImg)
+        print(f'Saved image as outputs/{self.image_save_number}.png')
+        self.image_save_number += 1
+
 
     def display_timer(self, pixmap):
         interface = self.interface

@@ -168,7 +168,7 @@ class StageCalHelper():
         startPos = currPos
         _, _, _, firstFrame = self.camera._last_frame_queue[0]
         p0 = self.calcOpticalFlowP0(firstFrame)
-        while abs(currPos[0] - commandedPos[0]) > 0.3 or abs(currPos[1] - commandedPos[1]) > 0.3:
+        while abs(currPos[0] - commandedPos[0]) > 1 or abs(currPos[1] - commandedPos[1]) > 1:
             while self.lastFrameNo == self.camera.get_frame_no():
                 time.sleep(0.05) #wait for a new frame to be read from the camera
             self.lastFrameNo = self.camera.get_frame_no()
@@ -188,36 +188,44 @@ class StageCalHelper():
         if video:
             out = cv2.VideoWriter('opticalFlow.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 10.0, (1024,1024))
         
-        self.build_panorama([i[0] for i in framesAndPoses])
-
-        lastFrame = framesAndPoses[0][0]
+        # self.build_panorama([i[0] for i in framesAndPoses])
+        panorama, offsets = self.calcORB_2([i[0] for i in framesAndPoses])
         for i in range(len(framesAndPoses) - 1):
-            if i > 50:
-                break
             currFrame, x_microns, y_microns = framesAndPoses[i + 1]
-            x_pix, y_pix = self.calcORB(lastFrame, currFrame)
-            lastFrame = currFrame
-
-            x_pix_total += x_pix
-            y_pix_total += y_pix
-
-            if math.isnan(x_pix) or math.isnan(y_pix): #if no corners can be found with optical flow, nan could be returned.  Don't add this to the list
-                continue
-
-            if video:
-                vidFrame = cv2.cvtColor(currFrame.copy(), cv2.COLOR_GRAY2BGR)
-                cv2.line(vidFrame, (512,512), (512 + int(x_pix_total), 512 + int(y_pix_total)), (255,0,0), 3)
-                cv2.line(vidFrame, (600,100), (600 + int(x_pix_total), 100 + int(y_pix_total)), (255,0,0), 3)
-                cv2.line(vidFrame, (900,400), (900 + int(x_pix_total), 400 + int(y_pix_total)), (255,0,0), 3)
-                out.write(vidFrame)
+            x_pix, y_pix = offsets[i]
+            imgPosStagePosList.append([-x_pix, -y_pix, x_microns, y_microns])
 
 
-            imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
+        # lastFrame = framesAndPoses[0][0]
+        # for i in range(len(framesAndPoses) - 1):
+        #     if i > 50:
+        #         break
+        #     currFrame, x_microns, y_microns = framesAndPoses[i + 1]
+        #     x_pix, y_pix = self.calcORB_2(lastFrame, currFrame)
+        #     lastFrame = currFrame
+
+        #     x_pix_total += x_pix
+        #     y_pix_total += y_pix
+
+        #     if math.isnan(x_pix) or math.isnan(y_pix): #if no corners can be found with optical flow, nan could be returned.  Don't add this to the list
+        #         continue
+
+        #     if video:
+        #         vidFrame = cv2.cvtColor(currFrame.copy(), cv2.COLOR_GRAY2BGR)
+        #         cv2.line(vidFrame, (512,512), (512 + int(x_pix_total), 512 + int(y_pix_total)), (255,0,0), 3)
+        #         cv2.line(vidFrame, (600,100), (600 + int(x_pix_total), 100 + int(y_pix_total)), (255,0,0), 3)
+        #         cv2.line(vidFrame, (900,400), (900 + int(x_pix_total), 400 + int(y_pix_total)), (255,0,0), 3)
+        #         out.write(vidFrame)
+
+
+        #     imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
         imgPosStagePosList = np.array(imgPosStagePosList)
+
+        print(imgPosStagePosList)
         
 
         if video:
-            cv2.imwrite('opticalFlow.png', lastFrame)
+            cv2.imwrite('panorama.png', panorama)
             out.release()
             print('released video')
         
@@ -289,6 +297,79 @@ class StageCalHelper():
         H, mask = cv2.findHomography(pts1, pts2, cv2.LMEDS)
 
         return H[0, 2], H[1, 2]
+    
+    def _paste_image(self, img1, img2, x_off, y_off):
+        h1, w1 = img1.shape
+        h2, w2 = img2.shape
+        print("h1: {}, w1: {}, h2: {}, w2: {} x_off: {} y_off: {}".format(h1, w1, h2, w2, x_off, y_off))
+        new_img = np.zeros((h1 + h2, w1 + w2), dtype=np.uint8)
+        if x_off >= 0 and y_off >= 0:
+            new_img[y_off:h2 + y_off, x_off:w2+x_off] = img2
+            new_img[0:h1, 0:w1] = img1
+        elif x_off > 0 and y_off < 0:
+            y_off_abs = abs(y_off)
+            new_img[0:h2, x_off:w2+x_off] = img2
+            new_img[y_off_abs:h1+y_off_abs, 0:w1] = img1
+        elif x_off < 0 and y_off > 0:
+            x_off_abs = abs(x_off)
+            new_img[y_off:h2+y_off, 0:w2] = img2
+            new_img[0:h1, x_off_abs:w1+x_off_abs] = img1
+        else:
+            y_off_abs = abs(y_off)
+            x_off_abs = abs(x_off)
+            new_img[0:h2, 0:w2] = img2
+            new_img[y_off_abs:h1+y_off_abs, x_off_abs:w1+x_off_abs] = img1
+
+        #crop out extra row, cols from img
+        non_black_cols = np.where(np.sum(new_img, axis=0) != 0)[0]
+        non_black_rows = np.where(np.sum(new_img, axis=1) != 0)[0]
+        crop_box = (min(non_black_rows), max(non_black_rows), min(non_black_cols), max(non_black_cols))
+        new_img = new_img[crop_box[0]:crop_box[1]+1, crop_box[2]:crop_box[3]+1]
+
+        return new_img
+
+    def calcORB_2(self, images):
+        # Initiate the first image as reference
+        reference_image = images[0]
+        orb = cv2.ORB_create()
+        reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
+
+        translations = []
+        total_x_off = 0
+        total_y_off = 0
+
+        # Loop through the images to find Homography Matrix
+        for i in range(1, len(images)):
+            current_image = images[i]
+            current_keypoints, current_descriptors = orb.detectAndCompute(current_image, None)
+            reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
+            matches = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True).match(reference_descriptors, current_descriptors)
+
+            # Find Homography Matrix
+            source_points = np.float32([reference_keypoints[match.queryIdx].pt for match in matches]).reshape(-1, 1, 2)
+            target_points = np.float32([current_keypoints[match.trainIdx].pt for match in matches]).reshape(-1, 1, 2)
+            homography_matrix, _ = cv2.findHomography(source_points, target_points, cv2.RANSAC, 5.0)
+
+            #calculate translation from homography matrix (translation from just this step)
+            x_off = -int(homography_matrix[0,2] / homography_matrix[2,2])
+            y_off = -int(homography_matrix[1,2] / homography_matrix[2,2])
+
+            #calc cumulative translation (translation from all steps)
+            total_x_off = x_off
+            total_y_off = -y_off - reference_image.shape[0] + current_image.shape[0]
+
+            translations.append([total_x_off, total_y_off])
+
+            #combine new image with reference image
+            # print("x_off: {}, y_off: {}".format(total_x_off, total_y_off))
+            # Sort them in the order of their distance.
+            matches = sorted(matches, key = lambda x:x.distance)
+            # Draw first 10 matches.
+            reference_image = self._paste_image(reference_image, current_image, x_off, y_off)
+
+        translations = np.array(translations)
+
+        return reference_image, translations
 
     def build_panorama(self, images):
         orb = cv2.ORB_create()
@@ -324,8 +405,6 @@ class StageCalHelper():
             # Update reference image
             reference_image = cv2.warpPerspective(current_image, homography_matrix, (width, height), flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
             reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
-
-        cv2.imwrite('panorama.jpg', reference_image)
 
 
     def calibrate(self, dist=500):
