@@ -1,6 +1,7 @@
 import time
 import cv2
 import numpy as np
+from PIL import Image
 from holypipette.devices.manipulator.microscope import Microscope
 from holypipette.devices.manipulator import Manipulator
 from holypipette.devices.camera import Camera
@@ -149,7 +150,7 @@ class StageCalHelper():
         self.lastFrameNo : int = None
         self.frameLag = frameLag
 
-    def calibrateContinuous(self, distance, video=False):
+    def calibrateContinuous(self, distance, video=True):
         '''Tell the stage to go a certain distance at a low max speed.
            Take a bunch of pictures and run optical flow. Use optical flow information
            to create a linear transform from stage microns to image pixels.
@@ -185,14 +186,18 @@ class StageCalHelper():
         y_pix_total = 0
 
         if video:
-            out = cv2.VideoWriter('opticalFlow.mp4', -1, 10.0, (1024,1024))
+            out = cv2.VideoWriter('opticalFlow.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 10.0, (1024,1024))
+        
+        self.build_panorama([i[0] for i in framesAndPoses])
 
+        lastFrame = framesAndPoses[0][0]
         for i in range(len(framesAndPoses) - 1):
+            if i > 50:
+                break
             currFrame, x_microns, y_microns = framesAndPoses[i + 1]
-            lastFrame, last_x_microns, last_y_microns = framesAndPoses[i]
-            p0 = self.calcOpticalFlowP0(lastFrame)
+            x_pix, y_pix = self.calcORB(lastFrame, currFrame)
+            lastFrame = currFrame
 
-            x_pix, y_pix = self.calcOpticalFlow(lastFrame, currFrame, p0)
             x_pix_total += x_pix
             y_pix_total += y_pix
 
@@ -212,7 +217,9 @@ class StageCalHelper():
         
 
         if video:
+            cv2.imwrite('opticalFlow.png', lastFrame)
             out.release()
+            print('released video')
         
         #for some reason, estimateAffinePartial2D only works with int64
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
@@ -260,6 +267,65 @@ class StageCalHelper():
         medianVect = np.median(dMovement, axis=0)
         
         return medianVect[0], medianVect[1]
+    
+    def calcORB(self, lastFrame, currFrame):
+        # Initialize the ORB detector and extract keypoints and descriptors from both images
+        orb = cv2.ORB_create()
+        kp1, des1 = orb.detectAndCompute(lastFrame, None)
+        kp2, des2 = orb.detectAndCompute(currFrame, None)
+
+        # Match the descriptors between the two images using brute-force matcher
+        bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
+        matches = bf.match(des1, des2)
+
+        # Sort the matches based on their distances
+        # matches = sorted(matches, key=lambda x: x.distance)
+
+        # Get the locations of the keypoints in both images
+        pts1 = np.float32([kp1[m.queryIdx].pt for m in matches])
+        pts2 = np.float32([kp2[m.trainIdx].pt for m in matches])
+
+        # Compute the relative movement between the keypoints using the RANSAC algorithm
+        H, mask = cv2.findHomography(pts1, pts2, cv2.LMEDS)
+
+        return H[0, 2], H[1, 2]
+
+    def build_panorama(self, images):
+        orb = cv2.ORB_create()
+        # Initiate the first image as reference
+        reference_image = images[0]
+        height, width = reference_image.shape[:2]
+        reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
+
+        # Initiate Homography Matrix
+        homography_matrix = np.eye(3, 3, dtype=np.float32)
+
+        # Loop through the images to find Homography Matrix
+        for i in range(1, len(images)):
+            current_image = images[i]
+            current_keypoints, current_descriptors = orb.detectAndCompute(current_image, None)
+            bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
+            matches = bf.match(reference_descriptors, current_descriptors)
+
+            # Get the locations of the keypoints in both images
+            pts1 = np.float32([reference_keypoints[m.queryIdx].pt for m in matches])
+            pts2 = np.float32([current_keypoints[m.trainIdx].pt for m in matches])
+
+            if len(pts1) < 4:
+                continue # Not enough matches to find homography
+
+            # Compute the relative movement between the keypoints using the RANSAC algorithm
+            transformation_matrix, mask = cv2.findHomography(pts1, pts2, cv2.LMEDS)
+            homography_matrix = np.dot(transformation_matrix, homography_matrix)
+
+            #print x and y offset
+            print(homography_matrix[0][2], homography_matrix[1][2])
+
+            # Update reference image
+            reference_image = cv2.warpPerspective(current_image, homography_matrix, (width, height), flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
+            reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
+
+        cv2.imwrite('panorama.jpg', reference_image)
 
 
     def calibrate(self, dist=500):

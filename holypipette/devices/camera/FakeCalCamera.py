@@ -151,7 +151,7 @@ class FakePipetteManipulator(FakeManipulator):
         return super().position(axis).copy()
 
     def absolute_move(self, x, axis):
-        # print(f"Moving axis {axis} to {x}\t{self.position()}\t{self.raw_position()}")
+        print(f"Moving axis {axis} to {x}\t{self.position()}\t{self.raw_position()}")
         new_setpoint_raw = np.empty((3,)) * np.nan
         if axis == 1:
             #we're dealing with the 'virtual' d-axis
@@ -206,7 +206,7 @@ class FakePipette():
 
     def __init__(self, manipulator:Manipulator, microscope_pixels_per_micron, stage_to_pipette=np.eye(4,4), pipetteAngle=np.pi/6):
 
-        stage_to_pipette = np.array([[0.7, -0.3, 0, 0], [0.3, 0.7, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+        stage_to_pipette = np.array([[0.7, -0.3, 0, 0], [0.3, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
         # rotation matrix to make the x-axis to parallel to the pipette, rather than the stage
         # note: this is the rotation matrix about the y-axis, but only rotating the x axis (not z)
@@ -233,7 +233,7 @@ class FakePipette():
 
         #create an alpha mask for the pipette (to make pipette see through)
         filter = ImageEnhance.Brightness(self.pipetteImg)
-        self.alphaMask = filter.enhance(1.5)
+        self.alphaMask = filter.enhance(1.2)
         
     def add_pipette_to_img(self, frame:Image, stagePos:list):
 
@@ -271,7 +271,8 @@ class FakePipette():
 
         #blur alpha channel
         alphaMask = cv2.GaussianBlur(np.array(self.alphaMask), (63,63), focusFactor / 2)
-        alphaMask = Image.fromarray(alphaMask)
+        alphaMask = alphaMask / 1.3
+        alphaMask = Image.fromarray(alphaMask.astype(np.uint8))
 
         #add pipette to frame
         frame.paste(pipetteImg, (pipette_img_x, pipette_img_y), alphaMask)

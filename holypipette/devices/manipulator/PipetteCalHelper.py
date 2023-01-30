@@ -11,7 +11,7 @@ class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 40
+    CAL_MAX_SPEED = 1000
     NORMAL_MAX_SPEED = 10000
 
     def __init__(self, pipette: Manipulator, camera: Camera):
@@ -20,7 +20,7 @@ class PipetteCalHelper():
         self.pipetteFinder : PipetteFinder = PipetteFinder()
         self.lastFrameNo = 0 #the last frame we've recorded when moving the pipette
 
-    def calibrateContinuous(self, distance):
+    def calibrateContinuous(self, distance, axis):
         '''Tell the stage to go a certain distance at a low max speed.
            Take a bunch of pictures and use optical flow. Use optical flow information
            to create a linear transform from stage microns to image pixels. 
@@ -33,28 +33,18 @@ class PipetteCalHelper():
             raise RuntimeError("pipette must be in frame for pipette calibration!")
 
         #move the pipette a certain distance forward and up
-        currPos = self.pipette.position()
-        cmd1 = np.array([currPos[0], currPos[1] + distance])
-        cmd2 = np.array([currPos[0], currPos[1]])
-        cmd3 = np.array([currPos[0] + distance, currPos[1]])
-        axes = np.array([1, 2], dtype=int)
-        # self.pipette.absolute_move_group(cmd1, axes)
-        self.pipette.absolute_move(cmd1[1], 1)
-        
-        cmd = 1
+        initPos = self.pipette.position()
+        cmd = initPos.copy()
+        cmd[axis] += distance
 
+        #note: the "axis" for absolute_move is 0 indexed b/c it's indexing into the array of device axes in manipulatorunit.py.  This should be refactored later for consistency
+        self.pipette.absolute_move(cmd[axis], axis) 
+        
         framesAndPoses = []
 
         #wait for the pipette to reach the pos. Record frames and pos as the pipette moves
         currPos = self.pipette.position()
-        while cmd != 3 or abs(currPos[0] - cmd3[0]) > 1 or abs(currPos[1] - cmd3[1]) > 1:
-            if cmd == 1 and abs(currPos[0] - cmd1[0]) < 1 and abs(currPos[1] - cmd1[1]) < 1:
-                cmd += 1
-                self.pipette.absolute_move(cmd2[1], 1)
-            if cmd == 2 and abs(currPos[0] - cmd2[0]) < 1 and abs(currPos[1] - cmd2[1]) < 1:
-                cmd += 1
-                self.pipette.absolute_move(cmd3[0], 0)
-
+        while abs(currPos[0] - cmd[0]) > 1 or abs(currPos[1] - cmd[1]) > 1:
 
             while self.lastFrameNo == self.camera.get_frame_no():
                 time.sleep(0.01) #wait for a new frame to be read from the camera
@@ -64,12 +54,7 @@ class PipetteCalHelper():
             #get latest img and pipette pos, add to arr
             _, _, _, frame = self.camera._last_frame_queue[0]
             framesAndPoses.append((frame, currPos))
-            if cmd == 1:
-                print(f"haven't reached yet... {currPos} {cmd1}")
-            if cmd == 2:
-                print(f"haven't reached yet... {currPos} {cmd2}")
-            if cmd == 3:
-                print(f"haven't reached yet... {currPos} {cmd3}")
+            print(f"haven't reached yet... {currPos} {cmd}")
 
         #find the pipette in all the frames
         pixelsAndPoses = []
@@ -86,31 +71,50 @@ class PipetteCalHelper():
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
         pixelsAndPoses = (pixelsAndPoses.copy()).astype(np.int64) 
         print(pixelsAndPoses)
-        #compute affine transformation matrix
-        mat, _ = cv2.estimateAffinePartial2D(pixelsAndPoses[:,2:4], pixelsAndPoses[:,0:2])
 
-        # #fix intercept - set image center --> stage center
-        # mat[0,2] = 0
-        # mat[1,2] = 0
+        #move pipette back to starting pos
+        self.pipette.absolute_move(initPos[axis], axis)
+        self.pipette.wait_until_still()
 
-        print('completed object detection. matrix:')
-        print(mat)
-
-        #return transformation matrix
-        return mat
+        return pixelsAndPoses
 
     def calibrate(self, dist=2500):
         '''Calibrates the pipette using YOLO object detection and pipette encoders to create a um -> pixels transformation matrix
         '''
-
+        
         self.pipette.set_max_speed(self.CAL_MAX_SPEED)
         initPos = self.pipette.position()
-        mat = self.calibrateContinuous(dist)
-        
+
+        for axis in range(2):
+            pixelsAndPoses = self.calibrateContinuous(dist, axis)
+            if axis == 0:
+                pixelsAndPosesX = pixelsAndPoses
+            else:
+                pixelsAndPosesY = pixelsAndPoses
+
+        # use ransac to fit a linear transform from pixels to stage position
+        xmat, _ = cv2.estimateAffinePartial2D(pixelsAndPosesX[:,2:4], pixelsAndPosesX[:,0:2])
+        ymat, _ = cv2.estimateAffinePartial2D(pixelsAndPosesY[:,2:4], pixelsAndPosesY[:,0:2])
+
+
+        #combine the two transforms into one
+        mat = np.zeros((2,3))
+        mat[0:2,0] = xmat[0:2,0] #combine column vectors
+        mat[0:2,1] = ymat[0:2,1]
+        mat[0,2] = xmat[0,2] #combine offsets
+        mat[1,2] = ymat[1,2]
+
+        alt, _ = cv2.estimateAffine2D(np.append(pixelsAndPosesY[:,2:4], pixelsAndPosesX[:,2:4], axis=0), np.append(pixelsAndPosesY[:,0:2], pixelsAndPosesX[:,0:2], axis=0))
+
         self.pipette.set_max_speed(self.NORMAL_MAX_SPEED)
         self.pipette.wait_until_still()
         self.pipette.absolute_move_group(initPos, [0,1,2])
         self.pipette.wait_until_still()
+
+        print('xmat', xmat)
+        print('ymat', ymat)
+        print('mat', mat)
+        print('alt', alt)
 
         #find the starting point of the pipette (in pixels) for offset calculation
         xs = []
@@ -125,4 +129,4 @@ class PipetteCalHelper():
         xs = np.array(xs)
         ys = np.array(ys)
 
-        return mat, (np.median(xs), np.median(ys))
+        return alt, (np.median(xs), np.median(ys))

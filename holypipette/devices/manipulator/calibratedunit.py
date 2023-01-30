@@ -209,7 +209,7 @@ class CalibratedUnit(ManipulatorUnit):
         # if not self.calibrated:
         #     raise CalibrationError
         print(f'inv: {self.Minv} {r-self.r0}')
-        u = dot(self.Minv, r-self.r0)
+        u = dot(self.Minv, r-self.r0-self.stage.reference_position())
         print(f'from: {r} going to {u}')
         print(f'u: {u} {r} {self.stage.reference_position()} {self.r0}')
         # if safe:
