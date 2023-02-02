@@ -5,11 +5,15 @@ import time
 __all__ = ['CellSorterController']
 
 class SerialCommands():
+    ###
+    # Serial CMDs for the Cell Sorter Control Unit (Controls LEDs and Valves)
+    ###
+
     #Test Command
-    TEST = 'a\x0D' #expected response: 'R'
+    TEST = 'a\r' #expected response: 'R'
     
     #LED Control
-    LED_ON = 's5+\r\n' #expected response: 'OK'
+    LED_ON = 's5+\r' #expected response: 'OK'
     LED_OFF = 's5-\r' #expected response: 'OK'
     LED_STATUS = 's5?\r' #expected response: '+' or '-'
 
@@ -43,6 +47,32 @@ class SerialCommands():
     #Open Valve 2, wait specified delay, open Valve 1
     VALVE_2_1_OPEN = 'L\r' #expected response: 'OK'
 
+    ###
+    # Serial CMDs for Cell Sorter Z-Manipulator Movement
+    ###
+
+    #Initialization
+    GET_VERSION = '?ver\r' #expected response Vers:ES31.00.038\r or similar
+
+    SET_PITCH = '!pitch 1.0 1.0 1.0\r' #no response, not clear what this does, maybe angle related?
+    SET_CUR = '!cur 0.5 0.5 0.5\r' #no response, not clear what this does
+    SET_REDUCTION = '!reduction 0.5 0.5 0.5\r' #no response, not clear what this does
+    SET_CUR_DELAY = '!cur_delay 10000 10000 10000\r' #no response, not clear what this does
+    SET_SEC_VEL = '!sec_vel 50.0 50.0 50.0\r' #no response, not clear what this does
+
+    #Movement
+    SET_ACCEL = '!accel 0.1 0.1 {:.2f}\r' #no response, sets the z-axis accel, param in the range 0.02 (1% accel) to 2 (100% accel)
+    SET_VEL = '!vel {:.13f} {:.13f} {:.13f}\r' #no response, sets the z-axis velocity, param in the range 0.05 (1% vel) to 50 (100% vel)
+    SET_POS_ABS = '!moa 0 0 {:.3f}\r' #no response, absolute position in microns
+    SET_POS_REL = '!mor 0 0 {:.16f}\r' #no response, relative position in microns
+    JOY_2 = '!joy 2\r' #no response, this always follows a SET_POS_REL command
+    GET_POS = '?pos\r' #expected response: 0.0000 0.0000 z-pos\r or similar
+    EMERGENCY_STOP = 'a\r' #no response, stops all movement
+
+    #Status
+    READ_SW = '?readsw\r' #expected response: 000000000000\r or similar
+
+
 
 class CellSorterController():
 
@@ -50,20 +80,20 @@ class CellSorterController():
         self.comPort : serial.Serial = comPort
 
     def _sendCmd(self, cmd):
-        self.comPort.flushInput()
-        self.comPort.flushOutput()
-        self.comPort.write(bytes(cmd, 'ascii'))
+        for a in cmd:
+            self.comPort.write(a.encode()) #send test command
+        self.comPort.flush()
         time.sleep(1) #TODO: replace with something better
 
         resp = self.comPort.read_all() #read reply to message
-        # resp = resp[:-1] #remove trailing \r
-        return resp.decode()
+        resp = resp.decode()
+        resp = resp[:-3] #remove trailing \r\n\x00 at the end of each reply
+        return resp
     
     def is_online(self):
         '''Sends a test command to the CellSorter and returns True if the response is correct
         '''
         resp = self._sendCmd(SerialCommands.TEST)
-        print(f'online resp: {resp}')
         return resp == 'R'
 
     def set_led(self, status: bool):
@@ -158,39 +188,149 @@ class CellSorterController():
         '''
         self.comPort.close()
 
-if __name__ == '__main__':
-    # Create a serial connection to the CellSorter
-    # As per documentation: 115200 baud, 8 data bits, no parity, 1 stop bit
-    cellSorterSerial = serial.Serial('COM5', 9600, timeout=0.4, parity=serial.PARITY_NONE, stopbits=1.5, 
-                                        bytesize=8, write_timeout=1, inter_byte_timeout=0.4, 
-                                        exclusive=True, dsrdtr=False, rtscts=False, xonxoff=False)
 
+class CellSorterManip():
 
-    # cellSorterSerial2 = serial.Serial('COM14', 115200, timeout=0.4, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, 
-    #                                     bytesize=serial.SEVENBITS, write_timeout=1, inter_byte_timeout=0.4, 
-    #                                     exclusive=True, dsrdtr=False, rtscts=False, xonxoff=False)
-    time.sleep(1)
+    def __init__(self, comPort: serial.Serial):
+        self.comPort : serial.Serial = comPort
 
-    #set EOF to 0x1A
+        self.maxVel = 25
+        self.maxAcc = 2
 
-    cellSorter = CellSorterController(cellSorterSerial)
+        #set init commands
+        self._sendCmd(SerialCommands.SET_PITCH)
+        self._sendCmd(SerialCommands.SET_CUR)
+        self._sendCmd(SerialCommands.SET_REDUCTION)
+        self._sendCmd(SerialCommands.SET_CUR_DELAY)
+        self._sendCmd(SerialCommands.SET_SEC_VEL)
 
-    # Check that the CellSorter is online
-    # if not cellSorter.is_online():
-    #     print('CellSorter not online')
-    #     exit(1)
+    def _sendCmd(self, cmd):
+        self.comPort.write(cmd.encode()) #send test command
+        self.comPort.flush()
+        time.sleep(0.1) #TODO: replace with something better
+
+        resp = self.comPort.read_all() #read reply to message
+        resp = resp.decode()
+        resp = resp[:-3] #remove trailing \r\n\x00 at the end of each reply
+        return resp
     
-    # Set the LED ring to use
-    cellSorter.set_led_ring(1)
+    def is_online(self):
+        '''Sends a test command to the CellSorter and returns True if the response is correct
+        '''
+        resp = self._sendCmd(SerialCommands.GET_VERSION)
+        return resp[:4] == 'Vers' # good responses start with Vers
+    
+    def set_pos_rel(self, pos: float):
+        '''Sets the position relative to the current position
+        '''
+        self._sendCmd(SerialCommands.SET_VEL.format(self.maxVel, self.maxVel, self.maxVel))
+        self._sendCmd(SerialCommands.SET_ACCEL.format(self.maxAcc))
+        self._sendCmd(SerialCommands.SET_POS_REL.format(pos))
+        self._sendCmd(SerialCommands.JOY_2)
+    
+    def set_pos_abs(self, pos: float):
+        '''Sets the absolute position
+        '''
+        self._sendCmd(SerialCommands.SET_VEL.format(self.maxVel, self.maxVel, self.maxVel))
+        self._sendCmd(SerialCommands.SET_ACCEL.format(self.maxAcc))
+        self._sendCmd(SerialCommands.SET_POS_ABS.format(pos))
 
-    # Flicker the LED on and off 5 times
-    # for i in range(5):
-    cellSorter.set_led_ring(1)
-    cellSorter.set_led(False)
-    time.sleep(1)
-    cellSorter.set_led(True)
-    time.sleep(10)
+    def emergency_stop(self):
+        '''Stops all movement immediately
+        '''
+        self._sendCmd(SerialCommands.EMERGENCY_STOP)
+    
+    def get_position(self):
+        '''Returns the current position of the z-axis
+        '''
+        resp = self._sendCmd(SerialCommands.GET_POS)
+        resp = resp.split(' ')
+        zPos = float(resp[2])
+        return zPos
+        
+    def set_velocity(self, vel: float):
+        '''Sets the velocity of the z-axis (velocity as a % from 0.1 to 100)
+        '''
+        if vel < 0.1 or vel > 100:
+            raise ValueError('Velocity must be between 0.1 and 100')
+        
+        nativeVel = vel / 2
 
-    #close serial
-    del cellSorter
+        self.maxVel = nativeVel
+        self._sendCmd(SerialCommands.SET_VEL.format(self.maxVel, self.maxVel, self.maxVel))
+    
+    def set_accel(self, accel: float):
+        '''Sets the acceleration of the z-axis from 1% to 100%
+        '''
+        if accel < 1 or accel > 100:
+            raise ValueError('Acceleration must be between 1 and 100')
+
+        nativeAccel = accel / 50
+        self.maxAcc = nativeAccel
+        self._sendCmd(SerialCommands.SET_ACCEL.format(self.maxAcc))
+
+    def read_SW(self):
+        '''Returns the current state of the switches
+        '''
+        resp = self._sendCmd(SerialCommands.READ_SW)
+        return resp
+
+    def __del__(self):
+        '''Close the serial connection when the object is destroyed
+        '''
+        self.comPort.close()
+
+if __name__ == '__main__':
+
+    testController = True
+
+    if testController:
+
+        # Create a serial connection to the CellSorter
+        # As per documentation: 115200 baud, 8 data bits, no parity, 1 stop bit
+        controllerSerial = serial.Serial('COM7', 115200, timeout=2, parity=serial.PARITY_NONE, stopbits=1, 
+                                            bytesize=8, write_timeout=1, inter_byte_timeout=2)
+        controllerSerial.dtr = False
+        controllerSerial.rts = False
+
+        cellSorterController = CellSorterController(controllerSerial)
+
+        # Check that the CellSorter is online
+        if not cellSorterController.is_online():
+            print('CellSorter not online')
+            exit(1)
+        
+        # Set the LED ring to use
+        cellSorterController.set_led_ring(1)
+
+        # Flicker the LED on and off 5 times
+        for i in range(5):
+            cellSorterController.set_led(True)
+            time.sleep(1)
+            cellSorterController.set_led(False)
+            time.sleep(1)
+
+        #close serial
+        del cellSorterController
+    
+    else:
+        manipulatorSerial = serial.Serial('COM14', 57600, timeout=2, parity=serial.PARITY_NONE, stopbits=2, 
+                                            bytesize=8, write_timeout=1, inter_byte_timeout=2)
+        manipulatorSerial.dtr = True
+        manipulatorSerial.rts = False
+
+        cellSorterManip = CellSorterManip(manipulatorSerial)
+
+        # Check that the CellSorter is online
+        if not cellSorterManip.is_online():
+            print('CellSorter not online')
+            exit(1)
+        
+        # move 0.05mm up
+        for i in range(3):
+            cellSorterManip.set_pos_rel(0.5)
+            time.sleep(0.5)
+
+        #close serial
+        del cellSorterManip
 
