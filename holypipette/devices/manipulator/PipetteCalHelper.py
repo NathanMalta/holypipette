@@ -92,29 +92,14 @@ class PipetteCalHelper():
             else:
                 pixelsAndPosesY = pixelsAndPoses
 
-        # use ransac to fit a linear transform from pixels to stage position
-        xmat, _ = cv2.estimateAffinePartial2D(pixelsAndPosesX[:,2:4], pixelsAndPosesX[:,0:2])
-        ymat, _ = cv2.estimateAffinePartial2D(pixelsAndPosesY[:,2:4], pixelsAndPosesY[:,0:2])
-
-
-        #combine the two transforms into one
-        mat = np.zeros((2,3))
-        mat[0:2,0] = xmat[0:2,0] #combine column vectors
-        mat[0:2,1] = ymat[0:2,1]
-        mat[0,2] = xmat[0,2] #combine offsets
-        mat[1,2] = ymat[1,2]
-
-        alt, _ = cv2.estimateAffine2D(np.append(pixelsAndPosesY[:,2:4], pixelsAndPosesX[:,2:4], axis=0), np.append(pixelsAndPosesY[:,0:2], pixelsAndPosesX[:,0:2], axis=0))
+        mat, _ = cv2.estimateAffine2D(np.append(pixelsAndPosesY[:,2:4], pixelsAndPosesX[:,2:4], axis=0), np.append(pixelsAndPosesY[:,0:2], pixelsAndPosesX[:,0:2], axis=0))
 
         self.pipette.set_max_speed(self.NORMAL_MAX_SPEED)
         self.pipette.wait_until_still()
         self.pipette.absolute_move_group(initPos, [0,1,2])
         self.pipette.wait_until_still()
 
-        print('xmat', xmat)
-        print('ymat', ymat)
         print('mat', mat)
-        print('alt', alt)
 
         #find the starting point of the pipette (in pixels) for offset calculation
         xs = []
@@ -129,4 +114,4 @@ class PipetteCalHelper():
         xs = np.array(xs)
         ys = np.array(ys)
 
-        return alt, (np.median(xs), np.median(ys))
+        return mat, (np.median(xs), np.median(ys))
