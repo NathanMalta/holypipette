@@ -121,7 +121,8 @@ class CalibratedUnit(ManipulatorUnit):
         # Matrices for passing to the camera/microscope system
         self.M = zeros((3,len(unit.axes))) # stage units (in micron) to camera
         self.Minv = zeros((len(unit.axes),3)) # Inverse of M
-        self.r0 = zeros(3) # Offset in reference system
+        self.r0 = zeros(3) # offset for px -> um conversion
+        self.r0_inv = zeros(3) # offset for um -> px conversion
 
         #setup pipette calibration helper class
         self.pipetteCalHelper = PipetteCalHelper(unit, camera)
@@ -158,40 +159,8 @@ class CalibratedUnit(ManipulatorUnit):
         # if not self.calibrated:
         #     raise CalibrationError
         u = self.position() # position vector in manipulator unit system
-
-        return dot(self.M, u) + self.r0 + self.stage.reference_position()
-
-    def reference_move_not_X(self, r, safe = False):
-        '''
-        Moves the unit to position r in reference camera system, without moving the stage,
-        but without moving the X axis (so this can be done last).
-
-        Parameters
-        ----------
-        r : XYZ position vector in um
-        safe : if True, moves the Z axis first or last, so as to avoid touching the coverslip
-        '''
-        if not self.calibrated:
-            raise CalibrationError
-        u = dot(self.Minv, r-self.stage.reference_position()-self.r0)
-        u[0] = self.position(axis=0)
-        self.absolute_move(u)
-
-    def reference_move_not_Z(self, r, safe = False):
-        '''
-        Moves the unit to position r in reference camera system, without moving the stage,
-        but without moving the Z axis (so this can be done last).
-
-        Parameters
-        ----------
-        r : XYZ position vector in um
-        safe : if True, moves the Z axis first or last, so as to avoid touching the coverslip
-        '''
-        if not self.calibrated:
-            raise CalibrationError
-        u = dot(self.Minv, r-self.stage.reference_position()-self.r0)
-        u[0] = self.position(axis=2)
-        self.absolute_move(u)
+        r = dot(self.M, u) + self.r0 + self.stage.reference_position()
+        return r
 
     def reference_move(self, r, safe = False):
         '''
@@ -206,28 +175,8 @@ class CalibratedUnit(ManipulatorUnit):
         if np.isnan(np.array(r)).any():
             raise RuntimeError("can not move to nan location.")
         
-        # if not self.calibrated:
-        #     raise CalibrationError
-        print(f'inv: {self.Minv} {r-self.r0}')
-        u = dot(self.Minv, r-self.r0-self.stage.reference_position())
-        print(f'from: {r} going to {u}')
-        print(f'u: {u} {r} {self.stage.reference_position()} {self.r0}')
-        # if safe:
-        #     z0 = self.position(axis=2)
-        #     z = u[2]
-        #     if (z-z0)*self.up_direction[2]>0: # going up
-        #         # Go up first
-        #         self.absolute_move(z,axis=2)
-        #         self.wait_until_still(2)
-        #         self.absolute_move(u)
-        #     else: # going down
-        #         # Go down first
-        #         uprime = u.copy()
-        #         u[2] = z0
-        #         self.absolute_move(uprime)
-        #         self.wait_until_still()
-        #         self.absolute_move(z,axis=2)
-        # else:
+        u = dot(self.Minv, r - self.stage.reference_position()) + self.r0_inv
+        print("moving to", u, "(um) aka", r, "(pixels)")
         self.absolute_move(u)
 
     def reference_relative_move(self, r):
@@ -277,40 +226,11 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         if not self.calibrated:
             raise CalibrationError
+        
+        # r from pyQt has origin at the center of the image, move origin to the top left corner (as expected by calibration)
+        r = np.array(r)
+        r = r + np.array([self.camera.width // 2, self.camera.height // 2, 0])
 
-        # Calculate length of the move
-        length = norm(dot(self.Minv,r-self.reference_position()))
-
-        p = self.M[:,0] # this is the vector for the first manipulator axis
-        uprime = self.reference_position() # I should call this uprime but rprime
-
-        # First we check whether movement is up or down
-        # if (r[2] - uprime[2])*self.microscope.up_direction<0:
-        #     # Movement is down
-        #     # First, we determine the intersection between the line going through x
-        #     # with direction corresponding to the manipulator first axis.
-        #     alpha = (uprime - r)[2] / self.M[2,0]
-        #     # TODO: check whether the intermediate move is accessible
-
-        #     print(alpha, uprime, r, self.M[2,0], p)
-
-        #     # Intermediate move
-        #     self.reference_move(r + alpha * p, safe = True)
-        #     # We need to wait here!
-        #     self.wait_until_still()
-
-        # # Recalibrate 100 um before target; only if distance is greater than 500 um
-        # if recalibrate & (length>500):
-        #     self.reference_move(r + 50 * p * self.up_direction[0],safe=True)
-        #     self.wait_until_still()
-        #     z0 = self.microscope.position()
-        #     self.focus()
-        #     self.auto_recalibrate(center=False)
-        #     self.microscope.absolute_move(z0)
-        #     self.microscope.wait_until_still()
-
-        # Final move
-        print(f'sending reference: {r} {withdraw} {p} {self.up_direction[0]}')
         self.reference_move(r, safe = True) # Or relative move in manipulator coordinates, first axis (faster)
 
 
@@ -326,81 +246,44 @@ class CalibratedUnit(ManipulatorUnit):
             p.append(((M[0,axis]**2 + M[1,axis]**2)/(1-M[2,axis]**2))**.5)
         return p
 
-
-    def analyze_calibration(self):
-        '''
-        Analyzes calibration matrices.
-        '''
-        # Objective magnification
-        print("Magnification for each axis of the pipette: "+str(self.pixel_per_um()[:2]))
-        pixel_per_um = self.pixel_per_um(M=self.M)[0]
-        print("Magnification for each axis of the stage: "+str(pixel_per_um))
-        print("Field size: "+str(self.camera.width/pixel_per_um)+" µm x "+str(self.camera.height/pixel_per_um)+' µm')
-        # Pipette vs. stage (for each axis, mvt should correspond to 1 um)
-        for axis in range(len(self.axes)):
-            compensating_move = -dot(self.Minv,self.M[:,axis])
-            length = (sum(compensating_move[:2]**2)+self.M[2,axis]**2)**.5
-            print("Precision of axis "+str(axis)+": "+str(abs(1-length)))
-            # Angles
-            angle = abs(180/pi * arcsin(self.M[2,axis] / length))
-            print('Angle of axis '+str(axis)+": "+str(angle))
-
-
-    def calculate_up_directions(self, M): #TODO: does this work?
-        '''
-        Calculates up directions for all axes and microscope from the matrix.
-        '''
-        # Determine up direction for the first axis (assumed to be the main axis)
-        positive_move = 1*M[:, 0] # move of 1 um along first axis
-        self.debug('Positive move: {}'.format(positive_move))
-        self.up_direction[0] = up_direction(self.pipette_position, positive_move)
-        self.info('Axis 0 up direction: ' + str(self.up_direction[0]))
-
-        # Determine microscope up direction
-        if self.microscope.up_direction is None:
-            self.microscope.up_direction = sign(M[2, 0])
-        self.info('Microscope up direction: ' + str(self.microscope.up_direction))
-
-        # Determine up direction of other axes
-        for axis in range(1,len(self.axes)):
-            # We use microscope up direction
-            s = sign(M[2, axis] * self.microscope.up_direction)
-            if s != 0:
-                self.up_direction[axis] = s
-            self.info('Axis ' + str(axis) + ' up direction: ' + str(self.up_direction[0]))
-
     def calibrate(self): #TODO: Z-Axis calibration?
         '''
-        Automatic calibration.
-        Starts without moving the stage, then moves the stage (unless it is fixed).
+        Automatic calibration of the pipette manipulator.
         '''
         
+        # move the pipette and create a calibration matrix (pix -> um)
         mat, initPos = self.pipetteCalHelper.calibrate(dist=self.config.pipette_diag_move)
-        print(f"orig mat {mat}\n\n")
-        M = np.eye(3,3)
-        M[0:2,0:2] = mat[:, 0:2]
 
-        if not isnan(M).any():
-            # *** Compute the (pseudo-)inverse ***
-            Minv = pinv(M)
+        # make mat 3x3
+        mat = np.append(mat, np.array([[0,0,1]]), axis=0)
+        print(f'calibration matrix: {mat}')
 
-            # Store the new values
-            self.M = M
-            self.Minv = Minv
-            print(self.M)
+        # *** Compute the (pseudo-)inverse ***
+        mat_inv = pinv(mat)
 
-            theoreticalPos = dot(self.M, self.position())[:2] + mat[:, 2]
-            print(f"theory: {theoreticalPos} actual {initPos} off {mat[:, 2]} yeild: {theoreticalPos[:2] }")
+        # store r0 and r0_inv
+        self.r0 = np.append(mat[0:2, 2], 0) #um -> pixels offset
+        self.r0_inv = np.append(mat_inv[0:2, 2], self.microscope.position() - self.position(2)) #pixels -> um offset
 
-            # self.r0 = np.append(mat[:, 2], self.microscope.position() - self.position(2))
-            xOff = theoreticalPos[0] - initPos[0]
-            yOff = theoreticalPos[1] - initPos[1]
-            self.r0 = np.array([-self.camera.width / 2 - xOff, -self.camera.height / 2 - yOff, self.microscope.position() - self.position(2)])
+        #for M and Minv, we only want the upper 2x2 matrix (b/c assumption that z axis is equivilant), the rest of the matrix is just the identity
+        self.M = np.eye(3,3)
+        self.M[0:2,0:2] = mat[0:2, 0:2]
 
-            self.calibrated = True
-            print(f"results: {self.M} {self.Minv} {self.r0}")
-        else:
+        self.Minv = np.eye(3,3)
+        self.Minv[0:2,0:2] = mat_inv[0:2, 0:2]
+
+        #check for nan values (invalid cal)
+        if isnan(self.M).any() or isnan(self.Minv).any():
             raise CalibrationError('Matrix contains NaN values')
+
+        print('Calibration Successful!')
+        print('M: ', self.M)
+        print('r0: ', self.r0)
+        print()
+        print('Minv: ', self.Minv)
+        print('r0_inv: ', self.r0_inv)
+
+        self.calibrated = True
 
     def save_configuration(self):
         '''

@@ -168,8 +168,7 @@ class PipetteInterface(TaskInterface):
                       description='Calibrate stage only',
                       task_description='Calibrating stage')
     def calibrate_stage(self):
-        self.execute([self.calibrated_stage.calibrate,
-                      self.calibrated_unit.analyze_calibration])
+        self.execute([self.calibrated_stage.calibrate])
 
     @blocking_command(category='Stage',
                     description='Create a Mosaic image',
@@ -182,16 +181,7 @@ class PipetteInterface(TaskInterface):
                       description='Calibrate manipulator',
                       task_description='Calibrating manipulator')
     def calibrate_manipulator(self):
-        self.execute([self.calibrated_unit.calibrate,
-                      self.calibrated_unit.analyze_calibration])
-
-    @blocking_command(category='Manipulators',
-                      description='Calibrate stage and manipulator (2nd Method)',
-                      task_description='Calibrating stage and manipulator (2nd Method)')
-    def calibrate_manipulator2(self):
-        self.execute([self.calibrated_unit.calibrate,
-                      self.calibrated_unit.analyze_calibration],
-                     argument=[2, None])
+        self.execute([self.calibrated_unit.calibrate])
 
     @blocking_command(category='Manipulators',
                       description='Recalibrate manipulator',
@@ -260,7 +250,6 @@ class PipetteInterface(TaskInterface):
                 cfg_units = cfg['units']
                 for i, cfg_unit in enumerate(cfg_units):
                     self.calibrated_units[i].load_configuration(cfg_unit)
-                self.calibrated_unit.analyze_calibration()
         else:
             self.debug('Configuration file {} not found'.format(self.config_filename))
 
