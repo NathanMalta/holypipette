@@ -159,7 +159,7 @@ class CalibratedUnit(ManipulatorUnit):
         # if not self.calibrated:
         #     raise CalibrationError
         u = self.position() # position vector in manipulator unit system
-        r = dot(self.M, u) + self.r0 + self.stage.reference_position()
+        r = dot(self.M, u) + self.r0
         return r
 
     def reference_move(self, r, safe = False):
@@ -175,9 +175,9 @@ class CalibratedUnit(ManipulatorUnit):
         if np.isnan(np.array(r)).any():
             raise RuntimeError("can not move to nan location.")
         
-        u = dot(self.Minv, r - self.stage.reference_position()) + self.r0_inv
+        u = dot(self.Minv, r) + self.r0_inv
         print("moving to", u, "(um) aka", r, "(pixels)")
-        self.absolute_move(u)
+        self.absolute_move(u, blocking=True)
 
     def reference_relative_move(self, r):
         '''
@@ -191,16 +191,6 @@ class CalibratedUnit(ManipulatorUnit):
             raise CalibrationError
         u = dot(self.Minv, r)
         self.relative_move(u)
-
-    def withdraw(self):
-        '''
-        Withdraw the pipette to the upper end position
-        '''
-        if self.up_direction[0]>0:
-            position = self.max[0]
-        else:
-            position = self.min[0]
-        self.absolute_move(position, axis=0)
 
     def focus(self):
         '''

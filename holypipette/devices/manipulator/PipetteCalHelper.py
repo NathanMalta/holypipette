@@ -11,8 +11,8 @@ class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 1000
-    NORMAL_MAX_SPEED = 10000
+    CAL_MAX_SPEED = 70
+    NORMAL_MAX_SPEED = 70
 
     def __init__(self, pipette: Manipulator, camera: Camera):
         self.pipette : Manipulator = pipette
@@ -20,7 +20,7 @@ class PipetteCalHelper():
         self.pipetteFinder : PipetteFinder = PipetteFinder()
         self.lastFrameNo = 0 #the last frame we've recorded when moving the pipette
 
-    def calibrateContinuous(self, distance, axis):
+    def calibrateContinuous(self, distance, axis, waypoints=10):
         '''Tell the stage to go a certain distance at a low max speed.
            Take a bunch of pictures and use optical flow. Use optical flow information
            to create a linear transform from stage microns to image pixels. 
@@ -35,7 +35,8 @@ class PipetteCalHelper():
         #move the pipette a certain distance forward and up
         initPos = self.pipette.position()
         cmd = initPos.copy()
-        cmd[axis] += distance
+        cmd[axis] += distance / waypoints
+        waypointNum = 0
 
         #note: the "axis" for absolute_move is 0 indexed b/c it's indexing into the array of device axes in manipulatorunit.py.  This should be refactored later for consistency
         self.pipette.absolute_move(cmd[axis], axis) 
@@ -44,7 +45,12 @@ class PipetteCalHelper():
 
         #wait for the pipette to reach the pos. Record frames and pos as the pipette moves
         currPos = self.pipette.position()
-        while abs(currPos[0] - cmd[0]) > 1 or abs(currPos[1] - cmd[1]) > 1:
+        while abs(currPos[0] - cmd[0]) > 1 or abs(currPos[1] - cmd[1]) > 1 or waypointNum < waypoints:
+            if abs(currPos[0] - cmd[0]) < 1 and abs(currPos[1] - cmd[1]) < 1:
+                #we've reached the waypoint, move to the next one
+                waypointNum += 1
+                cmd[axis] += distance / waypoints
+                self.pipette.absolute_move(cmd[axis], axis)
 
             while self.lastFrameNo == self.camera.get_frame_no():
                 time.sleep(0.01) #wait for a new frame to be read from the camera
@@ -86,7 +92,7 @@ class PipetteCalHelper():
         initPos = self.pipette.position()
 
         for axis in range(2):
-            pixelsAndPoses = self.calibrateContinuous(dist, axis)
+            pixelsAndPoses = self.calibrateContinuous(120, axis)
             if axis == 0:
                 pixelsAndPosesX = pixelsAndPoses
             else:

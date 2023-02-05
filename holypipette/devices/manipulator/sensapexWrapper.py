@@ -74,7 +74,6 @@ class SensapexManip(Manipulator):
             #we're dealing with a physical axis, it can be commanded directly
             new_setpoint_raw[axis-1] = x
 
-        print('move', new_setpoint_raw, self.raw_position())
         self.ump.goto_pos(self.deviceID, new_setpoint_raw, self.max_speed, max_acceleration=self.max_acceleration, linear=True)
 
 
