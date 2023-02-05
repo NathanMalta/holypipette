@@ -308,7 +308,7 @@ class ManipulatorGui(CameraGui):
              description='Save the current image to the outputs folder')
     def save_image(self):
         #get the current image
-        _, _, _, currImg = self.camera._last_frame_queue[0]
+        currImg = self.camera.get_16bit_image()
 
         #save the image
         cv2.imwrite(f'outputs/{self.image_save_number}.png', currImg)
