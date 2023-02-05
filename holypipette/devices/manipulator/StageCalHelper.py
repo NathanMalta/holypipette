@@ -1,7 +1,6 @@
 import time
 import cv2
 import numpy as np
-from PIL import Image
 from holypipette.devices.manipulator.microscope import Microscope
 from holypipette.devices.manipulator import Manipulator
 from holypipette.devices.camera import Camera
@@ -150,7 +149,7 @@ class StageCalHelper():
         self.lastFrameNo : int = None
         self.frameLag = frameLag
 
-    def calibrateContinuous(self, distance, video=True):
+    def calibrateContinuous(self, distance, video=False):
         '''Tell the stage to go a certain distance at a low max speed.
            Take a bunch of pictures and run optical flow. Use optical flow information
            to create a linear transform from stage microns to image pixels.
@@ -168,7 +167,7 @@ class StageCalHelper():
         startPos = currPos
         _, _, _, firstFrame = self.camera._last_frame_queue[0]
         p0 = self.calcOpticalFlowP0(firstFrame)
-        while abs(currPos[0] - commandedPos[0]) > 1 or abs(currPos[1] - commandedPos[1]) > 1:
+        while abs(currPos[0] - commandedPos[0]) > 0.3 or abs(currPos[1] - commandedPos[1]) > 0.3:
             while self.lastFrameNo == self.camera.get_frame_no():
                 time.sleep(0.05) #wait for a new frame to be read from the camera
             self.lastFrameNo = self.camera.get_frame_no()
@@ -182,50 +181,38 @@ class StageCalHelper():
         #run optical flow on the recorded frames
         print('running optical flow...')
         imgPosStagePosList = []
+        x_pix_total = 0
+        y_pix_total = 0
 
         if video:
-            out = cv2.VideoWriter('opticalFlow.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 10.0, (1024,1024))
-        
-        # self.build_panorama([i[0] for i in framesAndPoses])
-        panorama, offsets = self.calcORB_2([i[0] for i in framesAndPoses])
+            out = cv2.VideoWriter('opticalFlow.mp4', -1, 10.0, (1024,1024))
+
         for i in range(len(framesAndPoses) - 1):
             currFrame, x_microns, y_microns = framesAndPoses[i + 1]
-            x_pix, y_pix = offsets[i]
-            imgPosStagePosList.append([-x_pix, -y_pix, x_microns, y_microns])
+            lastFrame, last_x_microns, last_y_microns = framesAndPoses[i]
+            p0 = self.calcOpticalFlowP0(lastFrame)
+
+            x_pix, y_pix = self.calcOpticalFlow(lastFrame, currFrame, p0)
+            x_pix_total += x_pix
+            y_pix_total += y_pix
+
+            if math.isnan(x_pix) or math.isnan(y_pix): #if no corners can be found with optical flow, nan could be returned.  Don't add this to the list
+                continue
 
             if video:
                 vidFrame = cv2.cvtColor(currFrame.copy(), cv2.COLOR_GRAY2BGR)
-                cv2.line(vidFrame, (512,512), (512 + int(-x_pix), 512 + int(-y_pix)), (255,0,0), 3)
-                cv2.line(vidFrame, (600,100), (600 + int(-x_pix), 100 + int(-y_pix)), (255,0,0), 3)
-                cv2.line(vidFrame, (900,400), (900 + int(-x_pix), 400 + int(-y_pix)), (255,0,0), 3)
+                cv2.line(vidFrame, (512,512), (512 + int(x_pix_total), 512 + int(y_pix_total)), (255,0,0), 3)
+                cv2.line(vidFrame, (600,100), (600 + int(x_pix_total), 100 + int(y_pix_total)), (255,0,0), 3)
+                cv2.line(vidFrame, (900,400), (900 + int(x_pix_total), 400 + int(y_pix_total)), (255,0,0), 3)
                 out.write(vidFrame)
 
 
-        # lastFrame = framesAndPoses[0][0]
-        # for i in range(len(framesAndPoses) - 1):
-        #     if i > 50:
-        #         break
-        #     currFrame, x_microns, y_microns = framesAndPoses[i + 1]
-        #     x_pix, y_pix = self.calcORB_2(lastFrame, currFrame)
-        #     lastFrame = currFrame
-
-        #     x_pix_total += x_pix
-        #     y_pix_total += y_pix
-
-        #     if math.isnan(x_pix) or math.isnan(y_pix): #if no corners can be found with optical flow, nan could be returned.  Don't add this to the list
-        #         continue
-
-
-        #     imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
+            imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
         imgPosStagePosList = np.array(imgPosStagePosList)
-
-        print(imgPosStagePosList)
         
 
         if video:
-            cv2.imwrite('panorama.png', panorama)
             out.release()
-            print('released video')
         
         #for some reason, estimateAffinePartial2D only works with int64
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
@@ -273,120 +260,6 @@ class StageCalHelper():
         medianVect = np.median(dMovement, axis=0)
         
         return medianVect[0], medianVect[1]
-    
-    def calcORB(self, lastFrame, currFrame):
-        # Initialize the ORB detector and extract keypoints and descriptors from both images
-        orb = cv2.ORB_create()
-        kp1, des1 = orb.detectAndCompute(lastFrame, None)
-        kp2, des2 = orb.detectAndCompute(currFrame, None)
-
-        # Match the descriptors between the two images using brute-force matcher
-        bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
-        matches = bf.match(des1, des2)
-
-        # Sort the matches based on their distances
-        # matches = sorted(matches, key=lambda x: x.distance)
-
-        # Get the locations of the keypoints in both images
-        pts1 = np.float32([kp1[m.queryIdx].pt for m in matches])
-        pts2 = np.float32([kp2[m.trainIdx].pt for m in matches])
-
-        # Compute the relative movement between the keypoints using the RANSAC algorithm
-        H, mask = cv2.findHomography(pts1, pts2, cv2.LMEDS)
-
-        return H[0, 2], H[1, 2]
-    
-    def _paste_image(self, img1, img2, x_off, y_off):
-        h1, w1 = img1.shape
-        h2, w2 = img2.shape
-        # print("h1: {}, w1: {}, h2: {}, w2: {} x_off: {} y_off: {}".format(h1, w1, h2, w2, x_off, y_off))
-        new_img = np.zeros((h1 + h2, w1 + w2), dtype=np.uint8)
-        if x_off >= 0 and y_off >= 0:
-            real_x_off = x_off + w1
-            real_y_off = y_off + h1
-            new_img[real_y_off-h2:real_y_off, real_x_off-w2:real_x_off] = img2
-            new_img[0:h1, 0:w1] = img1
-        elif x_off >= 0 and y_off < 0:
-            y_off_abs = abs(y_off)
-            real_x_off = x_off + w1
-            new_img[0:h2, real_x_off-w2:real_x_off] = img2
-            new_img[y_off_abs:h1+y_off_abs, 0:w1] = img1
-        elif x_off < 0 and y_off >= 0:
-            real_y_off = y_off + h1
-            x_off_abs = abs(x_off)
-            new_img[real_y_off - h2:real_y_off, 0:w2] = img2
-            new_img[0:h1, x_off_abs:w1+x_off_abs] = img1
-        else:
-            y_off_abs = abs(y_off)
-            x_off_abs = abs(x_off)
-            new_img[0:h2, 0:w2] = img2
-            new_img[y_off_abs:h1+y_off_abs, x_off_abs:w1+x_off_abs] = img1
-
-        #crop out extra row, cols from img
-        non_black_cols = np.where(np.sum(new_img, axis=0) != 0)[0]
-        non_black_rows = np.where(np.sum(new_img, axis=1) != 0)[0]
-        crop_box = (min(non_black_rows), max(non_black_rows), min(non_black_cols), max(non_black_cols))
-        new_img = new_img[crop_box[0]:crop_box[1]+1, crop_box[2]:crop_box[3]+1]
-
-        return new_img
-
-    def calcORB_2(self, images):
-        # Initiate the first image as reference
-        reference_image = images[0]
-        prev_image = images[0]
-        orb = cv2.ORB_create(nfeatures=1000, scaleFactor=2, nlevels=2, edgeThreshold=30, firstLevel=0, WTA_K=3, scoreType=cv2.ORB_HARRIS_SCORE, patchSize=30, fastThreshold=20)
-        prev_keypoints, prev_descriptors = orb.detectAndCompute(reference_image, None)
-
-        translations = []
-        total_x_off = 0
-        total_y_off = 0
-
-        # Loop through the images to find Homography Matrix
-        for i in range(1, len(images)):
-            # if i > 10:
-            #     break
-            current_image = images[i]
-            current_keypoints, current_descriptors = orb.detectAndCompute(current_image, None)
-            prev_keypoints, prev_descriptors = orb.detectAndCompute(reference_image, None)
-            matches = cv2.BFMatcher(cv2.NORM_HAMMING2, crossCheck=True).match(prev_descriptors, current_descriptors)
-
-            # Find Homography Matrix
-            source_points = np.float32([prev_keypoints[match.queryIdx].pt for match in matches]).reshape(-1, 1, 2)
-            target_points = np.float32([current_keypoints[match.trainIdx].pt for match in matches]).reshape(-1, 1, 2)
-            homography_matrix, _ = cv2.findHomography(source_points, target_points, cv2.RANSAC, 5.0, None, 1000, 0.999)
-
-            #calculate translation from homography matrix (translation from just this step)
-            x_off = -int(homography_matrix[0,2] / homography_matrix[2,2]) - reference_image.shape[1] + current_image.shape[1]
-            y_off = -int(homography_matrix[1,2] / homography_matrix[2,2])
-
-            if x_off <= 0:
-                print(f'blocking: {x_off} {y_off}')
-                translations.append([total_x_off, total_y_off])
-                continue
-            if y_off >= 0:
-                print(f'blocking: {x_off} {y_off}')
-                translations.append([total_x_off, total_y_off])
-                continue
-
-            #calc cumulative translation (translation from all steps)
-            total_x_off += x_off
-            total_y_off += y_off
-
-            translations.append([total_x_off, total_y_off])
-
-            #combine new image with reference image
-            # print("x_off: {}, y_off: {}".format(total_x_off, total_y_off))
-            # Sort them in the order of their distance.
-            matches = sorted(matches, key = lambda x:x.distance)
-            # Draw first 10 matches.
-            img3 = cv2.drawMatches(reference_image,prev_keypoints,current_image,current_keypoints,matches[:100],None,flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-
-            reference_image = self._paste_image(reference_image, current_image, x_off, y_off)
-            prev_image = current_image
-
-        translations = np.array(translations)
-
-        return reference_image, translations
 
 
     def calibrate(self, dist=500):

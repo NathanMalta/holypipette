@@ -45,7 +45,7 @@ class ManipulatorUnit(Manipulator):
         else:
             return self.dev.position(self.axes[axis])
 
-    def absolute_move(self, x, axis = None):
+    def absolute_move(self, x, axis = None, blocking=True):
         '''
         Moves the device axis to position x in um.
 
@@ -56,11 +56,16 @@ class ManipulatorUnit(Manipulator):
         '''
         if axis is None:
             # then we move all axes
-            #for i, axis in enumerate(self.axes):
-            #    self.dev.absolute_move(x[i], axis)
-            self.dev.absolute_move_group(x, self.axes)
+            if blocking:
+                for i, axis in enumerate(self.axes):
+                    self.dev.absolute_move(x[i], axis)
+                    self.dev.wait_until_still([axis])
+            else:
+                self.dev.absolute_move_group(x, self.axes)
         else:
             self.dev.absolute_move(x, self.axes[axis])
+            if blocking:
+                self.dev.wait_until_still([self.axes[axis]])
         self.sleep(.05)
 
     def absolute_move_group(self, x, axes):
