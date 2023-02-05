@@ -45,7 +45,7 @@ class ManipulatorUnit(Manipulator):
         else:
             return self.dev.position(self.axes[axis])
 
-    def absolute_move(self, x, axis = None, blocking=True):
+    def absolute_move(self, x, axis = None, blocking=False):
         '''
         Moves the device axis to position x in um.
 
