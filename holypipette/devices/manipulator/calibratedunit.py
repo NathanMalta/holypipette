@@ -148,6 +148,18 @@ class CalibratedUnit(ManipulatorUnit):
             self.microscope.recover_state()
         self.absolute_move(self.saved_state)
 
+    def pixels_to_pipette_um(self, pos_pixels):
+        '''
+        Converts pixel coordinates to pipette um.
+        '''
+        return dot(self.Minv, pos_pixels) + self.r0_inv
+    
+    def pixels_to_um(self, pos_microns):
+        '''
+        Converts um to pixel coordinates.
+        '''
+        return dot(self.M, pos_microns) + self.r0
+
     def reference_position(self):
         '''
         Position in the reference camera system.
@@ -158,13 +170,13 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         # if not self.calibrated:
         #     raise CalibrationError
-        u = self.position() # position vector in manipulator unit system
-        r = dot(self.M, u) + self.r0
-        return r
+        pipette_pos_um = self.position() # position vector (um) in manipulator unit system
+        pos_pixels = self.pixels_to_um(pipette_pos_um) # position vector (pixels) in camera system
+        return pos_pixels
 
-    def reference_move(self, r, safe = False):
+    def reference_move(self, pos_pixels, safe = False):
         '''
-        Moves the unit to position r in reference camera system, without moving the stage.
+        Moves the unit to position pos_pixels in reference camera system, without moving the stage.
 
         Parameters
         ----------
@@ -172,12 +184,11 @@ class CalibratedUnit(ManipulatorUnit):
         safe : if True, moves the Z axis first or last, so as to avoid touching the coverslip
         '''
 
-        if np.isnan(np.array(r)).any():
+        if np.isnan(np.array(pos_pixels)).any():
             raise RuntimeError("can not move to nan location.")
         
-        u = dot(self.Minv, r) + self.r0_inv
-        print("moving to", u, "(um) aka", r, "(pixels)")
-        self.absolute_move(u, blocking=True)
+        pos_micron = self.pixels_to_um(pos_pixels) # position vector (um) in manipulator unit system
+        self.absolute_move(pos_micron, blocking=True)
 
     def reference_relative_move(self, r):
         '''

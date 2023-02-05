@@ -39,7 +39,7 @@ class PipetteCalHelper():
         waypointNum = 0
 
         #note: the "axis" for absolute_move is 0 indexed b/c it's indexing into the array of device axes in manipulatorunit.py.  This should be refactored later for consistency
-        self.pipette.absolute_move(cmd[axis], axis) 
+        self.pipette.absolute_move(cmd[axis], axis, blocking=True) 
         
         framesAndPoses = []
 
@@ -50,7 +50,7 @@ class PipetteCalHelper():
                 #we've reached the waypoint, move to the next one
                 waypointNum += 1
                 cmd[axis] += distance / waypoints
-                self.pipette.absolute_move(cmd[axis], axis)
+                self.pipette.absolute_move(cmd[axis], axis, blocking=True)
 
             while self.lastFrameNo == self.camera.get_frame_no():
                 time.sleep(0.01) #wait for a new frame to be read from the camera
