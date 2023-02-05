@@ -210,8 +210,6 @@ class ManipulatorGui(CameraGui):
                                  self.interface.calibrate_stage)
         self.register_key_action(Qt.Key_C, Qt.NoModifier,
                                  self.interface.calibrate_manipulator)
-        self.register_key_action(Qt.Key_C, Qt.AltModifier,
-                                 self.interface.calibrate_manipulator2)
         self.register_key_action(Qt.Key_R, Qt.NoModifier,
                                  self.interface.recalibrate_manipulator)
         self.register_mouse_action(Qt.RightButton, Qt.NoModifier,
@@ -289,15 +287,10 @@ class ManipulatorGui(CameraGui):
             painter.setPen(pen)
 
             x, y = self.tip_x, self.tip_y
+            painter.translate(x / scale, y / scale)
 
             if x is not None:
-                x+=self.camera.width/2
-                y+=self.camera.height/2
-                width = 20 * pixel_per_um / scale
-                height = 20 * pixel_per_um / scale
-                painter.translate(x / scale, y / scale)
-
-                painter.drawRect(-int(width / 2), -int(height / 2), int(width), int(height))
+                painter.drawRect(-10, -10, 10, 10)
             painter.end()
 
             # Display for just one second

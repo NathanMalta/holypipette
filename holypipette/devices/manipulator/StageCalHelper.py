@@ -182,8 +182,6 @@ class StageCalHelper():
         #run optical flow on the recorded frames
         print('running optical flow...')
         imgPosStagePosList = []
-        x_pix_total = 0
-        y_pix_total = 0
 
         if video:
             out = cv2.VideoWriter('opticalFlow.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 10.0, (1024,1024))
@@ -194,6 +192,13 @@ class StageCalHelper():
             currFrame, x_microns, y_microns = framesAndPoses[i + 1]
             x_pix, y_pix = offsets[i]
             imgPosStagePosList.append([-x_pix, -y_pix, x_microns, y_microns])
+
+            if video:
+                vidFrame = cv2.cvtColor(currFrame.copy(), cv2.COLOR_GRAY2BGR)
+                cv2.line(vidFrame, (512,512), (512 + int(-x_pix), 512 + int(-y_pix)), (255,0,0), 3)
+                cv2.line(vidFrame, (600,100), (600 + int(-x_pix), 100 + int(-y_pix)), (255,0,0), 3)
+                cv2.line(vidFrame, (900,400), (900 + int(-x_pix), 400 + int(-y_pix)), (255,0,0), 3)
+                out.write(vidFrame)
 
 
         # lastFrame = framesAndPoses[0][0]
@@ -209,13 +214,6 @@ class StageCalHelper():
 
         #     if math.isnan(x_pix) or math.isnan(y_pix): #if no corners can be found with optical flow, nan could be returned.  Don't add this to the list
         #         continue
-
-        #     if video:
-        #         vidFrame = cv2.cvtColor(currFrame.copy(), cv2.COLOR_GRAY2BGR)
-        #         cv2.line(vidFrame, (512,512), (512 + int(x_pix_total), 512 + int(y_pix_total)), (255,0,0), 3)
-        #         cv2.line(vidFrame, (600,100), (600 + int(x_pix_total), 100 + int(y_pix_total)), (255,0,0), 3)
-        #         cv2.line(vidFrame, (900,400), (900 + int(x_pix_total), 400 + int(y_pix_total)), (255,0,0), 3)
-        #         out.write(vidFrame)
 
 
         #     imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
@@ -301,18 +299,22 @@ class StageCalHelper():
     def _paste_image(self, img1, img2, x_off, y_off):
         h1, w1 = img1.shape
         h2, w2 = img2.shape
-        print("h1: {}, w1: {}, h2: {}, w2: {} x_off: {} y_off: {}".format(h1, w1, h2, w2, x_off, y_off))
+        # print("h1: {}, w1: {}, h2: {}, w2: {} x_off: {} y_off: {}".format(h1, w1, h2, w2, x_off, y_off))
         new_img = np.zeros((h1 + h2, w1 + w2), dtype=np.uint8)
         if x_off >= 0 and y_off >= 0:
-            new_img[y_off:h2 + y_off, x_off:w2+x_off] = img2
+            real_x_off = x_off + w1
+            real_y_off = y_off + h1
+            new_img[real_y_off-h2:real_y_off, real_x_off-w2:real_x_off] = img2
             new_img[0:h1, 0:w1] = img1
-        elif x_off > 0 and y_off < 0:
+        elif x_off >= 0 and y_off < 0:
             y_off_abs = abs(y_off)
-            new_img[0:h2, x_off:w2+x_off] = img2
+            real_x_off = x_off + w1
+            new_img[0:h2, real_x_off-w2:real_x_off] = img2
             new_img[y_off_abs:h1+y_off_abs, 0:w1] = img1
-        elif x_off < 0 and y_off > 0:
+        elif x_off < 0 and y_off >= 0:
+            real_y_off = y_off + h1
             x_off_abs = abs(x_off)
-            new_img[y_off:h2+y_off, 0:w2] = img2
+            new_img[real_y_off - h2:real_y_off, 0:w2] = img2
             new_img[0:h1, x_off_abs:w1+x_off_abs] = img1
         else:
             y_off_abs = abs(y_off)
@@ -331,8 +333,9 @@ class StageCalHelper():
     def calcORB_2(self, images):
         # Initiate the first image as reference
         reference_image = images[0]
-        orb = cv2.ORB_create()
-        reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
+        prev_image = images[0]
+        orb = cv2.ORB_create(nfeatures=1000, scaleFactor=2, nlevels=2, edgeThreshold=30, firstLevel=0, WTA_K=3, scoreType=cv2.ORB_HARRIS_SCORE, patchSize=30, fastThreshold=20)
+        prev_keypoints, prev_descriptors = orb.detectAndCompute(reference_image, None)
 
         translations = []
         total_x_off = 0
@@ -340,23 +343,34 @@ class StageCalHelper():
 
         # Loop through the images to find Homography Matrix
         for i in range(1, len(images)):
+            # if i > 10:
+            #     break
             current_image = images[i]
             current_keypoints, current_descriptors = orb.detectAndCompute(current_image, None)
-            reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
-            matches = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True).match(reference_descriptors, current_descriptors)
+            prev_keypoints, prev_descriptors = orb.detectAndCompute(reference_image, None)
+            matches = cv2.BFMatcher(cv2.NORM_HAMMING2, crossCheck=True).match(prev_descriptors, current_descriptors)
 
             # Find Homography Matrix
-            source_points = np.float32([reference_keypoints[match.queryIdx].pt for match in matches]).reshape(-1, 1, 2)
+            source_points = np.float32([prev_keypoints[match.queryIdx].pt for match in matches]).reshape(-1, 1, 2)
             target_points = np.float32([current_keypoints[match.trainIdx].pt for match in matches]).reshape(-1, 1, 2)
-            homography_matrix, _ = cv2.findHomography(source_points, target_points, cv2.RANSAC, 5.0)
+            homography_matrix, _ = cv2.findHomography(source_points, target_points, cv2.RANSAC, 5.0, None, 1000, 0.999)
 
             #calculate translation from homography matrix (translation from just this step)
-            x_off = -int(homography_matrix[0,2] / homography_matrix[2,2])
+            x_off = -int(homography_matrix[0,2] / homography_matrix[2,2]) - reference_image.shape[1] + current_image.shape[1]
             y_off = -int(homography_matrix[1,2] / homography_matrix[2,2])
 
+            if x_off <= 0:
+                print(f'blocking: {x_off} {y_off}')
+                translations.append([total_x_off, total_y_off])
+                continue
+            if y_off >= 0:
+                print(f'blocking: {x_off} {y_off}')
+                translations.append([total_x_off, total_y_off])
+                continue
+
             #calc cumulative translation (translation from all steps)
-            total_x_off = x_off
-            total_y_off = -y_off - reference_image.shape[0] + current_image.shape[0]
+            total_x_off += x_off
+            total_y_off += y_off
 
             translations.append([total_x_off, total_y_off])
 
@@ -365,46 +379,14 @@ class StageCalHelper():
             # Sort them in the order of their distance.
             matches = sorted(matches, key = lambda x:x.distance)
             # Draw first 10 matches.
+            img3 = cv2.drawMatches(reference_image,prev_keypoints,current_image,current_keypoints,matches[:100],None,flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+
             reference_image = self._paste_image(reference_image, current_image, x_off, y_off)
+            prev_image = current_image
 
         translations = np.array(translations)
 
         return reference_image, translations
-
-    def build_panorama(self, images):
-        orb = cv2.ORB_create()
-        # Initiate the first image as reference
-        reference_image = images[0]
-        height, width = reference_image.shape[:2]
-        reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
-
-        # Initiate Homography Matrix
-        homography_matrix = np.eye(3, 3, dtype=np.float32)
-
-        # Loop through the images to find Homography Matrix
-        for i in range(1, len(images)):
-            current_image = images[i]
-            current_keypoints, current_descriptors = orb.detectAndCompute(current_image, None)
-            bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
-            matches = bf.match(reference_descriptors, current_descriptors)
-
-            # Get the locations of the keypoints in both images
-            pts1 = np.float32([reference_keypoints[m.queryIdx].pt for m in matches])
-            pts2 = np.float32([current_keypoints[m.trainIdx].pt for m in matches])
-
-            if len(pts1) < 4:
-                continue # Not enough matches to find homography
-
-            # Compute the relative movement between the keypoints using the RANSAC algorithm
-            transformation_matrix, mask = cv2.findHomography(pts1, pts2, cv2.LMEDS)
-            homography_matrix = np.dot(transformation_matrix, homography_matrix)
-
-            #print x and y offset
-            print(homography_matrix[0][2], homography_matrix[1][2])
-
-            # Update reference image
-            reference_image = cv2.warpPerspective(current_image, homography_matrix, (width, height), flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
-            reference_keypoints, reference_descriptors = orb.detectAndCompute(reference_image, None)
 
 
     def calibrate(self, dist=500):
