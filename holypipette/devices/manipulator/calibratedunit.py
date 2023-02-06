@@ -148,13 +148,13 @@ class CalibratedUnit(ManipulatorUnit):
             self.microscope.recover_state()
         self.absolute_move(self.saved_state)
 
-    def pixels_to_pipette_um(self, pos_pixels):
+    def pixels_to_um(self, pos_pixels):
         '''
         Converts pixel coordinates to pipette um.
         '''
         return dot(self.Minv, pos_pixels) + self.r0_inv
     
-    def pixels_to_um(self, pos_microns):
+    def um_to_pixels(self, pos_microns):
         '''
         Converts um to pixel coordinates.
         '''
@@ -162,7 +162,7 @@ class CalibratedUnit(ManipulatorUnit):
 
     def reference_position(self):
         '''
-        Position in the reference camera system.
+        Position of the pipette in pixels (camera coordinate frame)
 
         Returns
         -------
@@ -170,8 +170,8 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         # if not self.calibrated:
         #     raise CalibrationError
-        pipette_pos_um = self.position() # position vector (um) in manipulator unit system
-        pos_pixels = self.pixels_to_um(pipette_pos_um) # position vector (pixels) in camera system
+        pos_um = self.position() # position vector (um) in manipulator unit system
+        pos_pixels = self.um_to_pixels(pos_um) + self.stage.reference_position()# position vector (pixels) in camera system
         return pos_pixels
 
     def reference_move(self, pos_pixels, safe = False):
@@ -186,22 +186,9 @@ class CalibratedUnit(ManipulatorUnit):
 
         if np.isnan(np.array(pos_pixels)).any():
             raise RuntimeError("can not move to nan location.")
-        
-        pos_micron = self.pixels_to_um(pos_pixels) # position vector (um) in manipulator unit system
+        pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) # position vector (um) in manipulator unit system
+
         self.absolute_move(pos_micron, blocking=True)
-
-    def reference_relative_move(self, r):
-        '''
-        Moves the unit by vector r in reference camera system, without moving the stage.
-
-        Parameters
-        ----------
-        r : XYZ position vector in um
-        '''
-        if not self.calibrated:
-            raise CalibrationError
-        u = dot(self.Minv, r)
-        self.relative_move(u)
 
     def focus(self):
         '''
@@ -244,7 +231,7 @@ class CalibratedUnit(ManipulatorUnit):
         p = []
         for axis in range(len(self.axes)):
             # The third axis is in um, the first two in pixels, hence the odd formula
-            p.append(((M[0,axis]**2 + M[1,axis]**2)/(1-M[2,axis]**2))**.5)
+            p.append(((M[0,axis]**2 + M[1,axis]**2))**.5) #TODO: is this correct? 
         return p
 
     def calibrate(self): #TODO: Z-Axis calibration?
@@ -342,10 +329,31 @@ class CalibratedStage(CalibratedUnit):
 
         self.focusHelper = FocusHelper(microscope, camera)
         self.stageCalHelper = StageCalHelper(unit, camera, self.config.frame_lag)
+        self.calPositon = np.zeros(2)
+        self.unit = unit
 
         # It should be an XY stage, ie, two axes
         if len(self.axes) != 2:
             raise CalibrationError('The unit should have exactly two axes for horizontal calibration.')
+
+    def reference_position(self):
+        '''Returns the offset (in pixels) of the stage compared to where it was when calibrated
+        '''
+        #get delta in um
+        posDelta = self.unit.position() - self.calPositon
+
+        print('self.Minv: ', self.Minv, 'posDelta: ', posDelta, 'self.r0_inv: ', self.r0_inv)
+
+        #convert to pixels
+        posDelta = dot(self.M, posDelta) + self.r0
+
+        #just get x and y (only concerned with pixels)
+        posDelta = posDelta[:2]
+
+        #append 0 for z
+        posDelta = np.append(posDelta, 0)
+
+        return posDelta
 
     def reference_move(self, r):
         if len(r)==2: # Third coordinate is actually not useful
@@ -355,13 +363,19 @@ class CalibratedStage(CalibratedUnit):
             r3D = r
         CalibratedUnit.reference_move(self, r3D) # Third coordinate is ignored
 
-    def reference_relative_move(self, r):
-        if len(r)==2: # Third coordinate is actually not useful
-            r3D = zeros(3)
-            r3D[:2] = r
-        else:
-            r3D = r
-        CalibratedUnit.reference_relative_move(self, r3D) # Third coordinate is ignored
+    def reference_relative_move(self, pos_pix):
+        '''
+        Moves the unit by vector r in reference camera system, without moving the stage.
+
+        Parameters
+        ----------
+        pos_pix : position in pixels
+        '''
+        if not self.calibrated:
+            raise CalibrationError
+            
+        pos_microns = dot(self.Minv, pos_pix)
+        self.relative_move(pos_microns)
 
     def calibrate(self):
         '''
@@ -377,10 +391,21 @@ class CalibratedStage(CalibratedUnit):
         self.info("Finished focusing.")
 
         # use LK optical flow to determine transformation matrix
-        self.M = self.stageCalHelper.calibrate(dist=self.config.stage_diag_move).T
-        self.Minv = pinv(self.M)
-        self.calibrated = True
+        self.calPositon = self.unit.position()
+        mat = self.stageCalHelper.calibrate(dist=self.config.stage_diag_move)
+        mat = np.append(mat, np.array([[0,0,1]]), axis=0)
+        mat_inv = pinv(mat)
+
+        # store r0 and r0_inv
+        self.r0 = mat[0:2, 2] #um -> pixels offset
+        self.r0_inv = mat_inv[0:2, 2] #pixels -> um offset
+
+        #for M and Minv, we only want the upper 2x2 matrix (b/c assumption that z axis is equivilant), the rest of the matrix is just the identity
+        self.M = mat[0:2, 0:2]
+
+        self.Minv = mat_inv[0:2, 0:2]
         
+        self.calibrated = True
 
         self.info('Stage calibration done')
         # self.analyze_calibration()
