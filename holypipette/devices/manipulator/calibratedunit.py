@@ -241,6 +241,7 @@ class CalibratedUnit(ManipulatorUnit):
         
         # move the pipette and create a calibration matrix (pix -> um)
         mat, initPos = self.pipetteCalHelper.calibrate(dist=self.config.pipette_diag_move)
+        self.stage.pipette_cal_position = self.stage.position() #update the position the pipette was calibrated at
 
         # make mat 3x3
         mat = np.append(mat, np.array([[0,0,1]]), axis=0)
@@ -329,7 +330,7 @@ class CalibratedStage(CalibratedUnit):
 
         self.focusHelper = FocusHelper(microscope, camera)
         self.stageCalHelper = StageCalHelper(unit, camera, self.config.frame_lag)
-        self.calPositon = np.zeros(2)
+        self.pipette_cal_position = np.zeros(2)
         self.unit = unit
 
         # It should be an XY stage, ie, two axes
@@ -340,7 +341,7 @@ class CalibratedStage(CalibratedUnit):
         '''Returns the offset (in pixels) of the stage compared to where it was when calibrated
         '''
         #get delta in um
-        posDelta = self.unit.position() - self.calPositon
+        posDelta = self.unit.position() - self.pipette_cal_position
 
         print('self.Minv: ', self.Minv, 'posDelta: ', posDelta, 'self.r0_inv: ', self.r0_inv)
 
@@ -391,7 +392,6 @@ class CalibratedStage(CalibratedUnit):
         self.info("Finished focusing.")
 
         # use LK optical flow to determine transformation matrix
-        self.calPositon = self.unit.position()
         mat = self.stageCalHelper.calibrate(dist=self.config.stage_diag_move)
         mat = np.append(mat, np.array([[0,0,1]]), axis=0)
         mat_inv = pinv(mat)
