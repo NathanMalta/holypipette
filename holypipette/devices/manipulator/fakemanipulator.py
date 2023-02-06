@@ -97,15 +97,11 @@ class FakeManipulator(Manipulator):
         if self.update_axis(axis):
             print(f'axis: {axis}\tpos: {self.x[axis-1]}\tspeed: {self.x[axis-1]:.2f}\tsetpoint: {self.setpoint[axis-1]}\tfail 1')
             raise RuntimeError("Cannot move while another command is running")
-        else:
-            print(f'passed axis {axis}')
 
         if self.min is None:
             self.setpoint[axis-1] = x
         else:
             self.setpoint[axis-1] = clip(x, self.min[axis-1], self.max[axis-1])
-        
-        print('setpoint: ', self.setpoint[axis-1])
         
         self.cmd_time[axis-1] = time.time()
         self.speeds[axis-1] = self.max_speed * math.copysign(1, x - self.x[axis-1])
