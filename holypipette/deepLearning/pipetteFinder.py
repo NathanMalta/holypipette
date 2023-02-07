@@ -50,6 +50,8 @@ class PipetteFinder():
 		
 		confidences = np.array(confidences)
 		best_x, best_y = boxes[confidences.argmax()]
+		if best_x is np.nan or best_y is np.nan:
+			return None #no pipette detected
 
 		#model outputs pos for a 640x640 img.  rescale x,y to input image size
 		best_x = (best_x / 640) * img.shape[1]

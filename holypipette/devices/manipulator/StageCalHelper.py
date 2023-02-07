@@ -149,7 +149,7 @@ class StageCalHelper():
         self.lastFrameNo : int = None
         self.frameLag = frameLag
 
-    def calibrateContinuous(self, distance, video=False):
+    def calibrateContinuous(self, distance, video=True):
         '''Tell the stage to go a certain distance at a low max speed.
            Take a bunch of pictures and run optical flow. Use optical flow information
            to create a linear transform from stage microns to image pixels.
@@ -187,9 +187,21 @@ class StageCalHelper():
         if video:
             out = cv2.VideoWriter('opticalFlow.mp4', -1, 10.0, (1024,1024))
 
+        #calculate the average image
+        avgImg = np.zeros_like(framesAndPoses[0][0], dtype=np.float64)
+        for frame, _, _ in framesAndPoses:
+            avgImg += frame
+        avgImg = avgImg / len(framesAndPoses)
+        avgImg = avgImg.astype(np.uint8)
+
+        #subtract average from all frames
+        for frame, _, _ in framesAndPoses:
+            frame -= avgImg
+
         for i in range(len(framesAndPoses) - 1):
             currFrame, x_microns, y_microns = framesAndPoses[i + 1]
             lastFrame, last_x_microns, last_y_microns = framesAndPoses[i]
+
             p0 = self.calcOpticalFlowP0(lastFrame)
 
             x_pix, y_pix = self.calcOpticalFlow(lastFrame, currFrame, p0)
@@ -216,7 +228,8 @@ class StageCalHelper():
         
         #for some reason, estimateAffinePartial2D only works with int64
         #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
-        imgPosStagePosList = (imgPosStagePosList).astype(np.int64) 
+        imgPosStagePosList = (imgPosStagePosList).astype(np.int64)
+        print(imgPosStagePosList)
 
         #compute affine transformation matrix
         mat, inVsOut = cv2.estimateAffinePartial2D(imgPosStagePosList[:,2:4], imgPosStagePosList[:,0:2])
@@ -234,18 +247,35 @@ class StageCalHelper():
     def calcOpticalFlowP0(self, firstFrame):
         #params for corner detector
         feature_params = dict(maxCorners = 100,
-                                qualityLevel = 0.5,
+                                qualityLevel = 0.1,
                                 minDistance = 10,
                                 blockSize = 10)
-        p0 = cv2.goodFeaturesToTrack(firstFrame, mask = None, **feature_params)
-        return p0
+        p0 = cv2.goodFeaturesToTrack(firstFrame, 70, 0.05, 25)
+        # p0 = cv2.goodFeaturesToTrack(firstFrame, mask = None, **feature_params)
 
+        return p0
+    
+    def calcMotionTranslation(self, lastFrame, currFrame):
+        warp_mode = cv2.MOTION_TRANSLATION
+        warp_matrix = np.eye(2, 3, dtype=np.float32)
+        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 5000,  1e-10)
+
+        #compute transformation for image translation
+        (cc, warp_matrix) = cv2.findTransformECC (lastFrame, currFrame,warp_matrix, warp_mode, criteria)
+
+        #get x, y translation (pixels)
+        print(warp_matrix)
+        x_pix = warp_matrix[0,2]
+        y_pix = warp_matrix[1,2]
+
+        print(x_pix, y_pix)
+
+        return x_pix, y_pix
 
     def calcOpticalFlow(self, lastFrame, currFrame, p0):
         #params for optical flow
         lk_params = dict(winSize  = (20, 20),
-                    maxLevel = 15,
-                    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100, 0.03))
+                    maxLevel = 20)
 
         # calculate optical flow from first frame
         p1, st, err = cv2.calcOpticalFlowPyrLK(lastFrame, currFrame, p0, None, **lk_params)
