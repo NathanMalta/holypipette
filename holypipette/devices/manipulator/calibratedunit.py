@@ -124,6 +124,8 @@ class CalibratedUnit(ManipulatorUnit):
         self.r0 = zeros(3) # offset for px -> um conversion
         self.r0_inv = zeros(3) # offset for um -> px conversion
 
+        self.emperical_offset = np.zeros(3) # offset for pipette position in px based on deep learning model
+
         #setup pipette calibration helper class
         self.pipetteCalHelper = PipetteCalHelper(unit, camera)
 
@@ -152,15 +154,21 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         Converts pixel coordinates to pipette um.
         '''
-        return dot(self.Minv, pos_pixels) + self.r0_inv
+        return dot(self.Minv, pos_pixels + self.emperical_offset) + self.r0_inv
+    
+    def pixels_to_um_relative(self, pos_pixels):
+        '''
+        Converts pixel coordinates to pipette um.
+        '''
+        return dot(self.Minv, pos_pixels)
     
     def um_to_pixels(self, pos_microns):
         '''
         Converts um to pixel coordinates.
         '''
-        return dot(self.M, pos_microns) + self.r0
+        return dot(self.M, pos_microns) + self.r0 - self.emperical_offset
 
-    def reference_position(self):
+    def reference_position(self, include_offest = True):
         '''
         Position of the pipette in pixels (camera coordinate frame)
 
@@ -171,8 +179,11 @@ class CalibratedUnit(ManipulatorUnit):
         # if not self.calibrated:
         #     raise CalibrationError
         pos_um = self.position() # position vector (um) in manipulator unit system
-        pos_pixels = self.um_to_pixels(pos_um) + self.stage.reference_position()# position vector (pixels) in camera system
-        return pos_pixels
+        if include_offest:
+            pos_pixels = self.um_to_pixels(pos_um) + self.stage.reference_position() + self.emperical_offset
+        else:
+            pos_pixels = self.um_to_pixels(pos_um) + self.stage.reference_position()
+        return pos_pixels # position vector (pixels) in camera system
 
     def reference_move(self, pos_pixels, safe = False):
         '''
@@ -189,6 +200,31 @@ class CalibratedUnit(ManipulatorUnit):
         pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) # position vector (um) in manipulator unit system
 
         self.absolute_move(pos_micron, blocking=True)
+        
+        emperical_poses = []
+        for i in range(10):
+            pos = self.pipetteCalHelper.pipetteFinder.find_pipette(self.camera.snap())
+            if pos != None:
+                emperical_poses.append([pos[0], pos[1]])
+
+        if len(emperical_poses) == 0:
+            print('No pipette found in image, can\'t run correction')
+            return
+        
+        pos_pixels_emperical = np.median(emperical_poses, axis=0)
+        pos_pixels_theoretical = self.reference_position(include_offest=False)[0:2]
+
+        print('Theoretical position: ', pos_pixels_theoretical)
+        print('Emperical position: ', pos_pixels_emperical)
+        print('abs move completed!')
+
+        #update offset
+        self.emperical_offset[0:2] = pos_pixels_emperical - pos_pixels_theoretical
+        print('Emperical offset (pix): ', self.emperical_offset)
+        print('Emperical offset (um): ', self.pixels_to_um_relative(self.emperical_offset))
+
+        #move to emperical position
+        self.absolute_move(pos_micron - self.pixels_to_um_relative(self.emperical_offset), blocking=True)
 
     def focus(self):
         '''

@@ -57,8 +57,8 @@ class SerialCommands():
     SET_PITCH = '!pitch 1.0 1.0 1.0\r' #no response, not clear what this does, maybe angle related?
     SET_CUR = '!cur 0.5 0.5 0.5\r' #no response, not clear what this does
     SET_REDUCTION = '!reduction 0.5 0.5 0.5\r' #no response, not clear what this does
-    SET_CUR_DELAY = '!cur_delay 10000 10000 10000\r' #no response, not clear what this does
-    SET_SEC_VEL = '!sec_vel 50.0 50.0 50.0\r' #no response, not clear what this does
+    SET_CUR_DELAY = '!curdelay 10000 10000 10000\r' #no response, not clear what this does
+    SET_SEC_VEL = '!secvel 50.0 50.0 50.0\r' #no response, not clear what this does
 
     #Movement
     SET_ACCEL = '!accel 0.1 0.1 {:.2f}\r' #no response, sets the z-axis accel, param in the range 0.02 (1% accel) to 2 (100% accel)
@@ -83,7 +83,7 @@ class CellSorterController():
         for a in cmd:
             self.comPort.write(a.encode()) #send test command
         self.comPort.flush()
-        time.sleep(1) #TODO: replace with something better
+        time.sleep(0.1) #TODO: replace with something better
 
         resp = self.comPort.read_all() #read reply to message
         resp = resp.decode()
@@ -282,7 +282,7 @@ class CellSorterManip():
 
 if __name__ == '__main__':
 
-    testController = True
+    testController = False
 
     if testController:
 
@@ -290,8 +290,8 @@ if __name__ == '__main__':
         # As per documentation: 115200 baud, 8 data bits, no parity, 1 stop bit
         controllerSerial = serial.Serial('COM7', 115200, timeout=2, parity=serial.PARITY_NONE, stopbits=1, 
                                             bytesize=8, write_timeout=1, inter_byte_timeout=2)
-        controllerSerial.dtr = False
-        controllerSerial.rts = False
+        # controllerSerial.dtr = False
+        # controllerSerial.rts = False
 
         cellSorterController = CellSorterController(controllerSerial)
 
@@ -306,9 +306,9 @@ if __name__ == '__main__':
         # Flicker the LED on and off 5 times
         for i in range(5):
             cellSorterController.set_led(True)
-            time.sleep(1)
+            time.sleep(0.5)
             cellSorterController.set_led(False)
-            time.sleep(1)
+            time.sleep(0.5)
 
         #close serial
         del cellSorterController
@@ -316,8 +316,8 @@ if __name__ == '__main__':
     else:
         manipulatorSerial = serial.Serial('COM14', 57600, timeout=2, parity=serial.PARITY_NONE, stopbits=2, 
                                             bytesize=8, write_timeout=1, inter_byte_timeout=2)
-        manipulatorSerial.dtr = True
-        manipulatorSerial.rts = False
+        # manipulatorSerial.dtr = True
+        # manipulatorSerial.rts = False
 
         cellSorterManip = CellSorterManip(manipulatorSerial)
 
@@ -326,10 +326,16 @@ if __name__ == '__main__':
             print('CellSorter not online')
             exit(1)
         
-        # move 0.05mm up
         for i in range(3):
-            cellSorterManip.set_pos_rel(0.5)
-            time.sleep(0.5)
+            # move down
+            for i in range(3):
+                cellSorterManip.set_pos_rel(-1)
+                time.sleep(0.5)
+            
+            #move up
+            for i in range(3):
+                cellSorterManip.set_pos_rel(1)
+                time.sleep(0.5)
 
         #close serial
         del cellSorterManip
