@@ -5,14 +5,15 @@ from holypipette.devices.manipulator.microscope import Microscope
 from holypipette.devices.manipulator import Manipulator
 from holypipette.devices.camera import Camera
 from holypipette.deepLearning.pipetteFinder import PipetteFinder
+from holypipette.deepLearning.pipetteFocuser import PipetteFocuser, FocusLevels
 from threading import Thread
 
 class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 70
-    NORMAL_MAX_SPEED = 70
+    CAL_MAX_SPEED = 1000
+    NORMAL_MAX_SPEED = 1000
 
     def __init__(self, pipette: Manipulator, camera: Camera):
         self.pipette : Manipulator = pipette
@@ -121,3 +122,28 @@ class PipetteCalHelper():
         ys = np.array(ys)
 
         return mat, (np.median(xs), np.median(ys))
+
+class PipetteFocusHelper():
+    def __init__(self, pipette: Manipulator, camera: Camera):
+        self.pipette : Manipulator = pipette
+        self.camera : Camera = camera
+        self.pipetteFocuser : PipetteFocuser = PipetteFocuser()
+    
+    def focus(self):
+        '''Moves the pipette into focus, if it's in the current frame
+        '''
+        _, _, _, frame = self.camera._last_frame_queue[0]
+        focusLevel = self.pipetteFocuser.get_pipette_focus(frame)
+
+        for i in range(10):
+            if focusLevel == FocusLevels.OUT_OF_FOCUS_DOWN:
+                self.pipette.relative_move(-50, 2)
+            elif focusLevel == FocusLevels.OUT_OF_FOCUS_UP:
+                self.pipette.relative_move(50, 2)
+            elif focusLevel == FocusLevels.IN_FOCUS:
+                break
+            
+            self.pipette.wait_until_still()
+
+            _, _, _, frame = self.camera._last_frame_queue[0]
+            focusLevel = self.pipetteFocuser.get_pipette_focus(frame)
