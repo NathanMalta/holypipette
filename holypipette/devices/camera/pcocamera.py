@@ -8,6 +8,7 @@ from . import *
 import warnings
 import pco
 from holypipette.deepLearning.pipetteFinder import PipetteFinder
+from holypipette.deepLearning.pipetteFocuser import PipetteFocuser, FocusLevels
 
 try:
     import cv2
@@ -52,6 +53,7 @@ class PcoCamera(Camera):
         self.upperBound = 255
         self.lowerBound = 0
         # self.pipetteFinder = PipetteFinder()
+        self.pipetteFocuser = PipetteFocuser()
 
         self.normalize() #normalize image on startup
 
@@ -128,6 +130,10 @@ class PcoCamera(Camera):
         This is a blocking call (wait until next frame is available)
         '''
         img = self.get_16bit_image()
+
+        # if img is not None:
+        #     focusLvl = self.pipetteFocuser.get_pipette_focus(img)
+        #     print(focusLvl)
 
         #apply upper / lower bounds (normalization)
         span = self.upperBound - self.lowerBound

@@ -210,12 +210,8 @@ class ManipulatorGui(CameraGui):
                                  self.interface.calibrate_stage)
         self.register_key_action(Qt.Key_C, Qt.NoModifier,
                                  self.interface.calibrate_manipulator)
-        self.register_key_action(Qt.Key_R, Qt.NoModifier,
-                                 self.interface.recalibrate_manipulator)
-        self.register_mouse_action(Qt.RightButton, Qt.NoModifier,
-                                   self.interface.recalibrate_manipulator_on_click)
-        self.register_key_action(Qt.Key_M, Qt.NoModifier,
-                                 self.measure_ranges)
+        self.register_key_action(Qt.Key_F, Qt.ControlModifier,
+                                 self.interface.focus_pipette)
         # Pipette selection
         number_of_units = len(self.interface.calibrated_units)
         for unit_number in range(number_of_units):

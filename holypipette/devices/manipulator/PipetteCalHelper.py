@@ -12,7 +12,7 @@ class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 1000
+    CAL_MAX_SPEED = 70
     NORMAL_MAX_SPEED = 1000
 
     def __init__(self, pipette: Manipulator, camera: Camera):
@@ -132,18 +132,22 @@ class PipetteFocusHelper():
     def focus(self):
         '''Moves the pipette into focus, if it's in the current frame
         '''
-        _, _, _, frame = self.camera._last_frame_queue[0]
+        print('focusing...')
+        frame = self.camera.get_16bit_image()
         focusLevel = self.pipetteFocuser.get_pipette_focus(frame)
-
+        print(focusLevel)
         for i in range(10):
             if focusLevel == FocusLevels.OUT_OF_FOCUS_DOWN:
+                print("moving pipette down")
                 self.pipette.relative_move(-50, 2)
             elif focusLevel == FocusLevels.OUT_OF_FOCUS_UP:
+                print("moving pipette up")
                 self.pipette.relative_move(50, 2)
             elif focusLevel == FocusLevels.IN_FOCUS:
+                print('in focus')
                 break
             
             self.pipette.wait_until_still()
 
-            _, _, _, frame = self.camera._last_frame_queue[0]
+            frame = self.camera.get_16bit_image()
             focusLevel = self.pipetteFocuser.get_pipette_focus(frame)

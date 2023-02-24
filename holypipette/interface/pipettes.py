@@ -184,6 +184,12 @@ class PipetteInterface(TaskInterface):
         self.execute([self.calibrated_unit.calibrate])
 
     @blocking_command(category='Manipulators',
+                      description='Focus the pipette',
+                      task_description='Calibrating manipulator')
+    def focus_pipette(self):
+        self.execute([self.calibrated_unit.autofocus_pipette])
+
+    @blocking_command(category='Manipulators',
                       description='Recalibrate manipulator',
                       task_description='Recalibrating manipulator')
     def recalibrate_manipulator(self):

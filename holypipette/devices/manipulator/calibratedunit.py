@@ -24,7 +24,7 @@ from numpy.linalg import inv, pinv, norm
 from holypipette.vision import *
 from threading import Thread
 from .StageCalHelper import FocusHelper, StageCalHelper
-from .PipetteCalHelper import PipetteCalHelper
+from .PipetteCalHelper import PipetteCalHelper, PipetteFocusHelper
 
 __all__ = ['CalibratedUnit', 'CalibrationError', 'CalibratedStage']
 
@@ -128,6 +128,7 @@ class CalibratedUnit(ManipulatorUnit):
 
         #setup pipette calibration helper class
         self.pipetteCalHelper = PipetteCalHelper(unit, camera)
+        self.pipetteFocusHelper = PipetteFocusHelper(unit, camera)
 
     def save_state(self):
         if self.stage is not None:
@@ -232,6 +233,12 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         self.microscope.absolute_move(self.reference_position()[2])
         self.microscope.wait_until_still()
+
+    def autofocus_pipette(self):
+        '''Use the microscope image to put the pipette in focus
+        '''
+        print('Autofocusing pipette')
+        self.pipetteFocusHelper.focus()
 
     def safe_move(self, r, withdraw = 0., recalibrate = False):
         '''

@@ -37,15 +37,21 @@ class PipetteFocuser():
 		'''return a predicted focus level for the pipette in the image
 		'''
 		#resize image to imgSize
-		img = cv2.resize(img, (self.imgSize, self.imgSize))
+		# img = cv2.resize(img, (self.imgSize, self.imgSize))
 
 		#normalize image
 		img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
 		cv2.imshow('normalized', img)
+		cv2.waitKey(1)
+
+		#make sure image has 3 channels
+		if len(img.shape) == 2:
+			img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
 		#convert to blob
 		blob = cv2.dnn.blobFromImage(img, 1, (self.imgSize, self.imgSize), (0, 0, 0), True, crop=False)
-
+		print(f"max: {np.max(blob)}, min: {np.min(blob)}")
+		
 		#run blob through network
 		self.yoloNet.setInput(blob)
 		outputs = self.yoloNet.forward(self.output_layers)
@@ -53,6 +59,7 @@ class PipetteFocuser():
 		#find class with highest confidence
 		classes = outputs[0]
 		bestClass = np.argmax(classes, axis=1)
+		print(f'best class: {bestClass}')
 		
 		if bestClass in self.focusedClasses:
 			return FocusLevels.IN_FOCUS
