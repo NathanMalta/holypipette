@@ -2,6 +2,7 @@ from sensapex import UMP
 import numpy as np
 from ctypes import c_int, c_float, byref
 import math
+import time
 
 from holypipette.devices.manipulator.manipulator import Manipulator
 
@@ -11,7 +12,13 @@ class SensapexManip(Manipulator):
     
     def __init__(self, deviceID = None):
         Manipulator.__init__(self)
+        print('setting library path...')
+        UMP.set_library_path('/usr/local/lib/libum.dylib') #only for mac
         self.ump = UMP.get_ump()
+        print('devices: ', self.ump.list_devices())
+        time.sleep(1)
+        print('devices: ', self.ump.list_devices())
+        
 
         #setup device ID
         if deviceID == None:
