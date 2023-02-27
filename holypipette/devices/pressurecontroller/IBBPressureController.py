@@ -100,8 +100,6 @@ class IBBPressureController(PressureController):
         self.serial.write(bytes(cmd, 'ascii'))
         self.serial.flush()
 
-        print(cmd)
-
         #add expected arduino responces
         self.expectedResponses.append((time.time(), f"set {self.channel} {raw_pressure}"))
         self.expectedResponses.append((time.time(), f"set"))
