@@ -149,7 +149,7 @@ class StageCalHelper():
         self.lastFrameNo : int = None
         self.frameLag = frameLag
 
-    def calibrateContinuous(self, distance, video=True):
+    def calibrateContinuous(self, distance, video=False):
         '''Tell the stage to go a certain distance at a low max speed.
            Take a bunch of pictures and run optical flow. Use optical flow information
            to create a linear transform from stage microns to image pixels.

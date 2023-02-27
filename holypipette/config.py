@@ -2,10 +2,7 @@
 Support for configuration objects (based on the param package)
 '''
 import warnings
-try:
-    import yaml
-except ImportError:
-    warnings.warn('Could not import pyyaml, will not be able to save or load configuration files')
+import yaml
 
 import param
 from param import Number, Boolean  # to make it available for import
