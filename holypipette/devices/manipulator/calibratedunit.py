@@ -21,7 +21,6 @@ import math
 from holypipette.devices.manipulator import *
 
 from numpy.linalg import inv, pinv, norm
-from holypipette.vision import *
 from threading import Thread
 from .StageCalHelper import FocusHelper, StageCalHelper
 from .PipetteCalHelper import PipetteCalHelper, PipetteFocusHelper

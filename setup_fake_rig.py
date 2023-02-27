@@ -7,6 +7,7 @@ from holypipette.devices.pressurecontroller import FakePressureController
 from holypipette.devices.camera.camera import FakeCamera
 from holypipette.devices.camera import FakeCalCamera, FakePipetteManipulator
 from holypipette.devices.manipulator import *
+from holypipette.devices.cellsorter import FakeCellSorterController, FakeCellSorterManip
 
 controller = FakeManipulator(min=[-4096, -4096, -2000],
                              max=[4096, 4096, 2000])
@@ -20,7 +21,10 @@ camera = FakeCalCamera(stageManip=controller, pipetteManip=pipetteManip, image_z
 microscope = Microscope(controller, 3)
 microscope.up_direction = 1.0
 
-units = [ManipulatorUnit(pipetteManip, [1, 2, 3])]
+unit = ManipulatorUnit(pipetteManip, [1, 2, 3])
 
 amplifier = FakeAmplifier()
 pressure = FakePressureController()
+
+cellSorter = FakeCellSorterController()
+cellSorterManip = FakeCellSorterManip()

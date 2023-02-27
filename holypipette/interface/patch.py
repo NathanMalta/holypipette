@@ -59,12 +59,11 @@ class AutoPatchInterface(TaskInterface):
         self.pressure = pressure
         self.pipette_controller = pipette_interface
         self.autopatcher_by_unit = {}
-        for idx, calibrated_unit in enumerate(self.pipette_controller.calibrated_units):
-            autopatcher = AutoPatcher(amplifier, pressure, calibrated_unit,
-                                      calibrated_unit.microscope,
-                                      calibrated_stage=self.pipette_controller.calibrated_stage,
-                                      config=self.config)
-            self.autopatcher_by_unit[idx] = autopatcher
+        autopatcher = AutoPatcher(amplifier, pressure, self.pipette_controller.calibrated_unit,
+                                    self.pipette_controller.calibrated_unit.microscope,
+                                    calibrated_stage=self.pipette_controller.calibrated_stage,
+                                    config=self.config)
+        self.autopatcher_by_unit[0] = autopatcher
 
     @property
     def current_autopatcher(self):

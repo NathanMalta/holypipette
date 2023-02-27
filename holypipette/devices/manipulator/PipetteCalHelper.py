@@ -12,7 +12,7 @@ class PipetteCalHelper():
     '''A helper class to aid with Pipette Calibration
     '''
     
-    CAL_MAX_SPEED = 70
+    CAL_MAX_SPEED = 1000
     NORMAL_MAX_SPEED = 1000
 
     def __init__(self, pipette: Manipulator, camera: Camera):

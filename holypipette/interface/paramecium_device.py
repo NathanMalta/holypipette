@@ -1,7 +1,6 @@
 # coding=utf-8
 from holypipette.config import Config, NumberWithUnit, Number, Boolean
 from holypipette.interface import TaskInterface, command, blocking_command, PipetteInterface
-from holypipette.vision import cardinal_points
 from holypipette.controller.paramecium_device import ParameciumDeviceController
 import os
 

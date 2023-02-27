@@ -14,9 +14,7 @@ class PipetteInterface(TaskInterface):
     Controller for the stage, the microscope, and several pipettes.
     '''
 
-    manipulator_switched = QtCore.pyqtSignal('QString', 'QString')
-
-    def __init__(self, stage, microscope, camera, units,
+    def __init__(self, stage, microscope, camera, unit,
                  config_filename=None):
         super(PipetteInterface, self).__init__()
         self.microscope = microscope
@@ -25,12 +23,11 @@ class PipetteInterface(TaskInterface):
         self.calibration_config = CalibrationConfig(name='Calibration')
         self.calibrated_stage = CalibratedStage(stage, None, microscope, camera,
                                                 config=self.calibration_config)
-        self.calibrated_units = [CalibratedUnit(unit,
+        self.calibrated_unit = CalibratedUnit(unit,
                                                 self.calibrated_stage,
                                                 microscope,
                                                 camera,
                                                 config=self.calibration_config)
-                                 for unit in units]
 
         # This should be refactored (in TaskInterface?)
         config_folder = os.path.join(os.path.expanduser('~'),'holypipette')
@@ -41,8 +38,6 @@ class PipetteInterface(TaskInterface):
         config_filename = os.path.join(config_folder,config_filename)
 
         self.config_filename = config_filename
-        self.current_unit = 0
-        self.calibrated_unit = None
         self.cleaning_bath_position = None
         self.contact_position = None
         self.rinsing_bath_position = None
@@ -50,58 +45,7 @@ class PipetteInterface(TaskInterface):
         self.timer_t0 = time.time()
 
     def connect(self, main_gui):
-        self.manipulator_switched.connect(main_gui.set_status_message)
-        self.switch_manipulator(1)
-        # We call this via command_received to catch errors automatically
-        self.command_received(self.load_configuration, None)
-
-    @command(category='Manipulators',
-             description='Measure manipulator ranges')
-    def measure_ranges(self):
-        '''
-        This is called every 500 ms when measuring ranges.
-        It updates the min and max on each axis.
-        '''
-        for i,calibrated_unit in enumerate(self.calibrated_units):
-            position = calibrated_unit.position()
-            calibrated_unit.min = np.array([position,calibrated_unit.min]).min(axis=0)
-            calibrated_unit.max = np.array([position,calibrated_unit.max]).max(axis=0)
-            self.info('Unit {} min = {}, max={}'.format(i,list(calibrated_unit.min),list(calibrated_unit.max)))
-
-        position = self.calibrated_stage.position()
-        self.calibrated_stage.min = np.array([position, self.calibrated_stage.min]).min(axis=0)
-        self.calibrated_stage.max = np.array([position, self.calibrated_stage.max]).max(axis=0)
-        self.info('Stage min = {}, max={}'.format(list(self.calibrated_stage.min), list(self.calibrated_stage.max)))
-
-        position = self.microscope.position()
-        self.microscope.min = min(self.microscope.min, position)
-        self.microscope.max = max(self.microscope.max, position)
-        self.info('Microscope min = {}, max={}'.format(self.microscope.min, self.microscope.max))
-
-    @command(category='Manipulators',
-             description='Reset manipulator ranges')
-    def reset_ranges(self):
-        for calibrated_unit in self.calibrated_units:
-            calibrated_unit.min = np.ones(len(calibrated_unit.min))*1e6
-            calibrated_unit.max = -np.ones(len(calibrated_unit.max))*1e6
-        self.calibrated_stage.min = np.ones(len(self.calibrated_stage.min))*1e6
-        self.calibrated_stage.max = -np.ones(len(self.calibrated_stage.max))*1e6
-        self.microscope.min = 1e6
-        self.microscope.max = -1e6
-
-    @command(category='Manipulators',
-             description='Check manipulator ranges')
-    def check_ranges(self):
-        for i,calibrated_unit in enumerate(self.calibrated_units):
-            print(calibrated_unit.min,calibrated_unit.max)
-            if ((calibrated_unit.max-calibrated_unit.min)<500.).any():
-                self.debug("Ranges of unit "+str(i)+" might not have been updated")
-        print(self.calibrated_stage.min,self.calibrated_stage.max)
-        if ((self.calibrated_stage.max - self.calibrated_stage.min) < 500.).any():
-            self.debug("Ranges of the stage might not have been updated")
-        print(self.microscope.min,self.microscope.max)
-        if self.microscope.max-self.microscope.min<500.:
-            self.debug("Ranges of the microscope might not have been updated")
+        pass #TODO: unused?
 
     @command(category='Manipulators',
              description='Move pipette in x direction by {:.0f}μm',
@@ -144,25 +88,6 @@ class PipetteInterface(TaskInterface):
              default_arg=10)
     def move_stage_horizontal(self, distance):
         self.calibrated_stage.relative_move(distance, axis=0)
-
-    @command(category='Manipulators',
-             description='Switch to manipulator {}',
-             default_arg=1)
-    def switch_manipulator(self, unit_number):
-        '''
-        Switch the currently active manipulator
-
-        Parameters
-        ----------
-        unit_number : int
-            The number of the manipulator (using 1-based indexing, whereas the
-            code internally uses 0-based indexing).
-        '''
-        self.current_unit = unit_number - 1
-        self.calibrated_unit = self.calibrated_units[self.current_unit]
-        #self.manipulator_switched.emit('Manipulators',
-        #                               'Manipulator: %d' % unit_number)
-
 
     @blocking_command(category='Stage',
                       description='Calibrate stage only',
@@ -228,38 +153,3 @@ class PipetteInterface(TaskInterface):
             raise RuntimeError("Coverslip floor must be set.")
         self.execute(self.microscope.absolute_move,
                      argument=self.microscope.floor_Z)
-
-    # TODO: Make the configuration system more general/clean
-    @command(category='Manipulators',
-             description='Save the calibration information',
-             success_message='Calibration information stored')
-    def save_configuration(self):
-        # Saves configuration
-        self.info("Saving configuration")
-        cfg = {'stage': self.calibrated_stage.save_configuration(),
-               'units': [u.save_configuration() for u in self.calibrated_units],
-               'microscope': self.microscope.save_configuration()}
-        with open(self.config_filename, "wb") as f:
-            pickle.dump(cfg, f)
-
-    @command(category='Manipulators',
-             description='Load the calibration information',
-             success_message='Calibration information loaded')
-    def load_configuration(self):
-        # Loads configuration
-        self.info("Loading configuration")
-        if os.path.exists(self.config_filename):
-            with open(self.config_filename, "rb") as f:
-                cfg = pickle.load(f)
-                self.microscope.load_configuration(cfg['microscope'])
-                self.calibrated_stage.load_configuration(cfg['stage'])
-                cfg_units = cfg['units']
-                for i, cfg_unit in enumerate(cfg_units):
-                    self.calibrated_units[i].load_configuration(cfg_unit)
-        else:
-            self.debug('Configuration file {} not found'.format(self.config_filename))
-
-    @command(category='Manipulators',
-                     description='Reset timer')
-    def reset_timer(self):
-        self.timer_t0 = time.time()

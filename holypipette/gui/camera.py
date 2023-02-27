@@ -424,7 +424,7 @@ class CameraGui(QtWidgets.QMainWindow):
             The pixmap to draw on.
         '''
         painter = QtGui.QPainter(pixmap)
-        pen = QtGui.QPen(QtGui.QColor(200, 0, 0, 125))
+        pen = QtGui.QPen(QtGui.QColor(0, 0, 0, 125))
         pen.setWidth(4)
         painter.setPen(pen)
         c_x, c_y = pixmap.width() // 2, pixmap.height() // 2
@@ -466,11 +466,6 @@ class CameraGui(QtWidgets.QMainWindow):
         self.help_button.setCheckable(True)
         self.help_button.setToolTip('Toggle help window display')
 
-        self.flip_button = QtWidgets.QToolButton(clicked=self.camera.flip,)
-        self.flip_button.setIcon(qta.icon('fa.exchange'))
-        self.flip_button.setCheckable(True)
-        self.flip_button.setToolTip('Flip image')
-
         self.log_button = QtWidgets.QToolButton(clicked=self.toggle_log)
         self.log_button.setIcon(qta.icon('fa.file'))
         self.log_button.setCheckable(True)
@@ -488,7 +483,6 @@ class CameraGui(QtWidgets.QMainWindow):
 
         self.status_bar.addPermanentWidget(self.help_button)
         self.status_bar.addPermanentWidget(self.log_button)
-        self.status_bar.addPermanentWidget(self.flip_button)
         self.status_bar.addPermanentWidget(self.record_button)
         self.status_bar.addPermanentWidget(self.autoexposure_button)
 

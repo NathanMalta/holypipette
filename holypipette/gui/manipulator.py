@@ -38,33 +38,12 @@ class ManipulatorGui(CameraGui):
         self.tip_x, self.tip_y = None, None
         self.tip_t0 = None
 
-        # Measure manipulator positions (range measurement)
-        self.position_timer = QtCore.QTimer()
-        self.position_timer.timeout.connect(self.interface.measure_ranges)
-        self.position_measurement = False
-
         # Stage position for display
         self._last_stage_measurement = None
         self._stage_position = (None, None, None)
 
         #number of images we've saved so far.  Allows images to have different names
         self.image_save_number = 0
-
-    @command(category='Manipulators',
-             description='Measure manipulator ranges')
-    def measure_ranges(self):
-        if self.position_measurement is False:
-            self.interface.info('Measuring manipulator ranges')
-            self.position_measurement = True
-            # Reset ranges
-            self.interface.reset_ranges()
-            self.position_timer.start(500)
-        else:
-            self.interface.info('Stopped measuring manipulator ranges')
-            self.position_measurement = False
-            self.position_timer.stop()
-            # Check whether all positions have been updated
-            self.interface.check_ranges()
 
     def display_manipulator(self, pixmap):
         '''
@@ -75,7 +54,6 @@ class ManipulatorGui(CameraGui):
         painter.setPen(pen)
         painter.setFont(QFont("Arial", int(pixmap.height()/20)))
         c_x, c_y = pixmap.width() *19.0 / 20, pixmap.height() * 19.0 / 20
-        painter.drawText(int(c_x), int(c_y), str(self.interface.current_unit+1))
 
     def draw_scale_bar(self, pixmap, text=True, autoscale=True,
                        position=True):
@@ -108,7 +86,7 @@ class ManipulatorGui(CameraGui):
                 length_in_um = 10
 
             painter = QtGui.QPainter(pixmap)
-            pen = QtGui.QPen(QtGui.QColor(200, 0, 0, 125))
+            pen = QtGui.QPen(QtGui.QColor(0, 0, 0, 255))
             pen.setWidth(pen_width)
             painter.setPen(pen)
             c_x, c_y = pixmap.width() / 20, pixmap.height() * 19.0 / 20
@@ -212,20 +190,6 @@ class ManipulatorGui(CameraGui):
                                  self.interface.calibrate_manipulator)
         self.register_key_action(Qt.Key_F, Qt.ControlModifier,
                                  self.interface.focus_pipette)
-        # Pipette selection
-        number_of_units = len(self.interface.calibrated_units)
-        for unit_number in range(number_of_units):
-            key = QtGui.QKeySequence("%d" % (unit_number + 1))[0]
-            self.register_key_action(key, None,
-                                     self.interface.switch_manipulator,
-                                     argument=unit_number + 1,
-                                     default_doc=False)
-        options = '/'.join(str(x+1) for x in range(number_of_units))
-        self.help_window.register_custom_action('Manipulators', options,
-                                                'Switch to manipulator ' + options)
-
-        self.register_key_action(Qt.Key_S, Qt.ControlModifier,
-                                 self.interface.save_configuration)
 
         # Move pipette by clicking
         self.register_mouse_action(Qt.LeftButton, Qt.NoModifier,
