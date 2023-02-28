@@ -34,7 +34,7 @@ class PatchGui(ManipulatorGui):
         
         button_tab = PatchButtons(self.patch_interface, pipette_interface, self.start_task, self.interface_signals)
         self.add_config_gui(self.patch_interface.config)
-        self.add_tab(button_tab, 'Patch Cmds', index = 0)
+        self.add_tab(button_tab, 'Commands', index = 0)
         # Update the pressure and information in the status bar every 50ms
         self.pressure_timer = QtCore.QTimer()
         self.pressure_timer.timeout.connect(self.display_pressure)
@@ -99,38 +99,16 @@ class PatchButtons(QtWidgets.QWidget):
         self.addPositionBox('stage position', layout, self.update_stage_pos_labels)
         self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
 
-        #add a box for patch command buttons
+        #add a box for cal + movement
+        buttonList = [['Calibrate Stage', 'Calibrate Pipette'], ['Set Cell Plane', 'Focus Cell Plane'], ['Focus Pipette Plane'], ['Raise Pipette for Coverslip', 'Lower Pipette to Original']]
+        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.calibrate_manipulator], [self.pipette_interface.set_floor, self.pipette_interface.go_to_floor], [self.pipette_interface.focus_pipette], [self.pipette_interface.raise_pipette, self.pipette_interface.lower_pipette]]
+        self.addButtonList('calibration and movement', layout, buttonList, cmds)
+
+        #add a box for patching cmds
+        buttonList = [['Patch with move', 'Patch without move'], ['Break in'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
+        cmds = [[self.patch_interface.patch_with_move, self.patch_interface.patch_without_move], [self.patch_interface.break_in], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
+        self.addButtonList('patching', layout, buttonList, cmds)
         
-        buttonList = [['Calibrate Stage', 'Calibrate Pipette'], ['Set Cell Plane', 'Focus Cell Plane'], ['Focus Pipette Plane']]
-        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.calibrate_manipulator], [self.pipette_interface.set_floor, self.pipette_interface.go_to_floor], [self.pipette_interface.focus_pipette]]
-        
-        box = QtWidgets.QGroupBox('patch cmds')
-        rows = QtWidgets.QVBoxLayout()
-        # create a new row for each button
-        for i, buttons_in_row in enumerate(buttonList):
-            new_row = QtWidgets.QHBoxLayout()
-            new_row.setAlignment(Qt.AlignLeft)
-
-            #for each button in the row, create a button
-            for j, button in enumerate(buttons_in_row):
-                button = QtWidgets.QPushButton(button)
-
-                #make sure buttons fill the space in the x-axis
-                button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
-
-                #set the size of the button
-                button.setMinimumWidth(50)
-                button.setMinimumHeight(50)
-
-                #connect the button to the command, run using the start_task method
-                button.clicked.connect(lambda state, i=i, j=j: self.run_command(cmds[i][j]))
-
-                #add the button to the frame
-                new_row.addWidget(button)
-            rows.addLayout(new_row)
-        
-        box.setLayout(rows)
-        layout.addWidget(box)
         self.setLayout(layout)
 
     def run_command(self, cmd):
@@ -169,6 +147,35 @@ class PatchButtons(QtWidgets.QWidget):
         pos_timer.timeout.connect(lambda: update_func(indicies))
         pos_timer.start(200)
         self.pos_update_timers.append(pos_timer)
+    
+    def addButtonList(self, box_name: str, layout, buttonNames, cmds):
+        box = QtWidgets.QGroupBox(box_name)
+        rows = QtWidgets.QVBoxLayout()
+        # create a new row for each button
+        for i, buttons_in_row in enumerate(buttonNames):
+            new_row = QtWidgets.QHBoxLayout()
+            new_row.setAlignment(Qt.AlignLeft)
+
+            #for each button in the row, create a button
+            for j, button in enumerate(buttons_in_row):
+                button = QtWidgets.QPushButton(button)
+
+                #make sure buttons fill the space in the x-axis
+                button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
+                #set the size of the button
+                button.setMinimumWidth(50)
+                button.setMinimumHeight(50)
+
+                #connect the button to the command, run using the start_task method
+                button.clicked.connect(lambda state, i=i, j=j: self.run_command(cmds[i][j]))
+
+                #add the button to the frame
+                new_row.addWidget(button)
+            rows.addLayout(new_row)
+        box.setLayout(rows)
+        layout.addWidget(box)
+
     
     def update_pipette_pos_labels(self, indicies):
         #update the position labels

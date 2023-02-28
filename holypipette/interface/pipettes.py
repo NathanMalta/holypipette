@@ -43,6 +43,7 @@ class PipetteInterface(TaskInterface):
         self.rinsing_bath_position = None
         self.paramecium_tank_position = None
         self.timer_t0 = time.time()
+        self.pos_before_raise = None
 
     def connect(self, main_gui):
         pass #TODO: unused?
@@ -115,19 +116,6 @@ class PipetteInterface(TaskInterface):
         self.execute([self.calibrated_unit.focus])
 
     @blocking_command(category='Manipulators',
-                      description='Recalibrate manipulator',
-                      task_description='Recalibrating manipulator')
-    def recalibrate_manipulator(self):
-        self.execute(self.calibrated_unit.recalibrate)
-
-    @blocking_command(category='Manipulators',
-                     description='Recalibrate manipulator',
-                     task_description='Recalibrate manipulator at click position')
-    def recalibrate_manipulator_on_click(self, xy_position):
-        self.debug('asking for recalibration at {}'.format(xy_position))
-        self.execute(self.calibrated_unit.recalibrate, argument=xy_position)
-
-    @blocking_command(category='Manipulators',
                      description='Move pipette to position',
                      task_description='Moving to position with safe approach')
     def move_pipette(self, xy_position):
@@ -135,6 +123,28 @@ class PipetteInterface(TaskInterface):
         position = np.array([x, y, self.microscope.position()])
         self.debug('asking for safe move to {}'.format(position))
         self.execute(self.calibrated_unit.safe_move, argument=position)
+
+    @blocking_command(category='Manipulators',
+                    description='Raise the pipette high enough to insert the coverslip',
+                    task_description='Raising the pipette high enough to insert the coverslip')
+    def raise_pipette(self, raise_distance = 1000):
+        if self.pos_before_raise is None:
+            self.pos_before_raise = self.calibrated_unit.dev.position()
+            position = np.array([self.pos_before_raise[0], self.pos_before_raise[1], 0])
+            self.execute(self.calibrated_unit.absolute_move, argument=position)
+        else:
+            raise RuntimeError('Pipette already raised')
+
+    @blocking_command(category='Manipulators',
+                description='Lower the pipette after inserting the coverslip',
+                task_description='Lowering the pipette after inserting the coverslip')
+    def lower_pipette(self):
+        if self.pos_before_raise is not None:
+            self.execute(self.calibrated_unit.absolute_move, argument=self.pos_before_raise)
+            self.pos_before_raise = None
+        else:
+            raise RuntimeError('Pipette not raised')
+
 
     @blocking_command(category='Manipulators',
                      description='Move stage to position',
