@@ -4,6 +4,9 @@ from types import MethodType
 
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import Qt
+import pyqtgraph as pg
+import numpy as np
+
 
 from holypipette.controller import TaskController
 from holypipette.gui.manipulator import ManipulatorGui
@@ -31,7 +34,7 @@ class PatchGui(ManipulatorGui):
         
         button_tab = PatchButtons(self.patch_interface, pipette_interface, self.start_task, self.interface_signals)
         self.add_config_gui(self.patch_interface.config)
-        self.add_tab(button_tab, 'Buttons')
+        self.add_tab(button_tab, 'Patch Cmds', index = 0)
         # Update the pressure and information in the status bar every 50ms
         self.pressure_timer = QtCore.QTimer()
         self.pressure_timer.timeout.connect(self.display_pressure)
@@ -87,28 +90,47 @@ class PatchButtons(QtWidgets.QWidget):
         self.start_task = start_task
         self.interface_signals = interface_signals
 
+        self.pos_update_timers = []
+        self.pos_labels = []
+
         layout = QtWidgets.QVBoxLayout()
         layout.setAlignment(Qt.AlignTop)
-        buttonList = ['Calibrate Stage', 'Calibrate Pipette', 'Set Cell Plane', 'Focus Cell Plane', 'Focus Pipette Plane']
-        cmds = [self.pipette_interface.calibrate_stage, self.pipette_interface.calibrate_manipulator, self.pipette_interface.set_floor, self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette]
 
+        self.addPositionBox('stage position', layout, self.update_stage_pos_labels)
+        self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
+
+        #add a box for patch command buttons
+        
+        buttonList = [['Calibrate Stage', 'Calibrate Pipette'], ['Set Cell Plane', 'Focus Cell Plane'], ['Focus Pipette Plane']]
+        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.calibrate_manipulator], [self.pipette_interface.set_floor, self.pipette_interface.go_to_floor], [self.pipette_interface.focus_pipette]]
+        
+        box = QtWidgets.QGroupBox('patch cmds')
+        rows = QtWidgets.QVBoxLayout()
         # create a new row for each button
-        for i, button in enumerate(buttonList):
+        for i, buttons_in_row in enumerate(buttonList):
             new_row = QtWidgets.QHBoxLayout()
             new_row.setAlignment(Qt.AlignLeft)
 
-            button = QtWidgets.QPushButton(button)
-            
-            #make sure button fills the row
-            button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+            #for each button in the row, create a button
+            for j, button in enumerate(buttons_in_row):
+                button = QtWidgets.QPushButton(button)
 
-            #connect the button to the command, run using the start_task method
-            button.clicked.connect(lambda state, i=i: self.run_command(cmds[i]))
+                #make sure buttons fill the space in the x-axis
+                button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
-            #add the button to the frame
-            new_row.addWidget(button)
-            layout.addLayout(new_row)
+                #set the size of the button
+                button.setMinimumWidth(50)
+                button.setMinimumHeight(50)
 
+                #connect the button to the command, run using the start_task method
+                button.clicked.connect(lambda state, i=i, j=j: self.run_command(cmds[i][j]))
+
+                #add the button to the frame
+                new_row.addWidget(button)
+            rows.addLayout(new_row)
+        
+        box.setLayout(rows)
+        layout.addWidget(box)
         self.setLayout(layout)
 
     def run_command(self, cmd):
@@ -125,3 +147,43 @@ class PatchButtons(QtWidgets.QWidget):
         else:
             #we're dealing with a function
             cmd()
+
+    def addPositionBox(self, name: str, layout, update_func):
+        #add a box for manipulator and stage positions
+        box = QtWidgets.QGroupBox(name)
+        row = QtWidgets.QHBoxLayout()
+        indicies = []
+        #create a new row for each position
+        for j, axis in enumerate(['x', 'y', 'z']):
+            #create a label for the position
+            label = QtWidgets.QLabel(f'{axis}: TODO')
+            row.addWidget(label)
+
+            indicies.append(len(self.pos_labels))
+            self.pos_labels.append(label)
+        box.setLayout(row)
+        layout.addWidget(box)
+
+        #periodically update the position labels
+        pos_timer = QtCore.QTimer()
+        pos_timer.timeout.connect(lambda: update_func(indicies))
+        pos_timer.start(200)
+        self.pos_update_timers.append(pos_timer)
+    
+    def update_pipette_pos_labels(self, indicies):
+        #update the position labels
+        currPos = self.pipette_interface.calibrated_unit.unit.position()
+        for i, ind in enumerate(indicies):
+            label = self.pos_labels[ind]
+            label.setText(f'{label.text().split(":")[0]}: {currPos[i]:.2f}')
+
+    def update_stage_pos_labels(self, indicies):
+        #update the position labels
+        xyPos = self.pipette_interface.calibrated_stage.position()
+        zPos = self.pipette_interface.microscope.position()
+        for i, ind in enumerate(indicies):
+            label = self.pos_labels[ind]
+            if i < 2:
+                label.setText(f'{label.text().split(":")[0]}: {xyPos[i]:.2f}')
+            else:
+                label.setText(f'{label.text().split(":")[0]}: {zPos:.2f}')

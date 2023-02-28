@@ -897,8 +897,11 @@ class CameraGui(QtWidgets.QMainWindow):
         config_gui = ConfigGui(config)
         self.config_tab.addTab(config_gui, config.name)
 
-    def add_tab(self, tab, name):
-        self.config_tab.addTab(tab, name)
+    def add_tab(self, tab, name, index=None):
+        if index is None:
+            self.config_tab.addTab(tab, name)
+        else:
+            self.config_tab.insertTab(index, tab, name)
 
     @command(category='General',
              description='Show/hide the configuration pane')

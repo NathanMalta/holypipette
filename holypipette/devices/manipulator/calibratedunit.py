@@ -122,6 +122,7 @@ class CalibratedUnit(ManipulatorUnit):
         self.Minv = zeros((len(unit.axes),3)) # Inverse of M
         self.r0 = zeros(3) # offset for px -> um conversion
         self.r0_inv = zeros(3) # offset for um -> px conversion
+        self.unit = unit
 
         self.emperical_offset = np.zeros(3) # offset for pipette position in px based on deep learning model
 
