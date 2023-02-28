@@ -1,6 +1,12 @@
 import time
 
 import numpy as np
+from holypipette.devices.amplifier.amplifier import Amplifier
+from holypipette.devices.manipulator.calibratedunit import CalibratedUnit
+from holypipette.devices.manipulator.microscope import Microscope
+from holypipette.devices.pressurecontroller.pressurecontroller import PressureController
+
+from holypipette.config import Config
 
 from .base import TaskController
 
@@ -14,7 +20,7 @@ class AutopatchError(Exception):
 
 
 class AutoPatcher(TaskController):
-    def __init__(self, amplifier, pressure, calibrated_unit, microscope, calibrated_stage, config):
+    def __init__(self, amplifier : Amplifier, pressure : PressureController, calibrated_unit : CalibratedUnit, microscope : Microscope, calibrated_stage, config : Config):
         super(AutoPatcher, self).__init__()
         self.config = config
         self.amplifier = amplifier

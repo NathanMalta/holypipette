@@ -45,6 +45,9 @@ class FakeCalCamera(Camera):
         #start image recording thread
         self.start_acquisition()
 
+    def normalize(self):
+        print('normalize not implemented for FakeCalCamera')
+
     def set_exposure(self, value):
         if 0 < value <= 200:
             self.exposure_time = value

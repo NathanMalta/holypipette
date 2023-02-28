@@ -45,7 +45,7 @@ class CameraInterface(TaskInterface):
     @command(category='Camera',
              description='Normalize the image',
              )
-    def normalize(self):
+    def normalize(self, param=None):
         self.camera.normalize()
 
     @command(category='Camera',
