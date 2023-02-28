@@ -96,22 +96,6 @@ class ManipulatorGui(CameraGui):
                              int(c_x + round(length_in_um*scaled_length)), c_y)
             if text:
                 painter.drawText(c_x, c_y - 10, '{}µm'.format(length_in_um))
-            if position and not self.running_task:
-                # Only ask for positions if last measurement has been made a
-                # sufficiently long time ago
-                update_time = self.interface.calibration_config.position_update/1000.
-                if (self._last_stage_measurement is None or
-                        time.time() - self._last_stage_measurement > update_time):
-                    self._stage_position = (stage.position(axis=0),
-                                            stage.position(axis=1),
-                                            self.interface.microscope.position())
-                    self._last_stage_measurement = time.time()
-                x, y, z = self._stage_position
-                # If floor position is set, display Z relative to floor position, positive being above
-                if (self.interface.microscope.floor_Z is not None) and (self.interface.microscope.up_direction is not None):
-                    z= (z-self.interface.microscope.floor_Z) * self.interface.microscope.up_direction
-                position_text = 'x: {:.0f}µm, y: {:.0f}µm, z: {:.0f}µm'
-                painter.drawText(c_x, c_y + 20, position_text.format(x, y, z))
             painter.end()
 
     def register_commands(self, manipulator_keys = True):
