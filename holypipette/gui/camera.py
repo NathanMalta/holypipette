@@ -477,9 +477,9 @@ class CameraGui(QtWidgets.QMainWindow):
         self.record_button.setToolTip('Toggle video recording')
         self.record_button.setStyleSheet('QToolButton:checked {background-color: red;}'
         )
-        self.autoexposure_button = QtWidgets.QToolButton(clicked=self.camera_interface.auto_exposure)
+        self.autoexposure_button = QtWidgets.QToolButton(clicked=self.camera_interface.normalize)
         self.autoexposure_button.setIcon(qta.icon('fa.camera'))
-        self.autoexposure_button.setToolTip('Use automatic exposure')
+        self.autoexposure_button.setToolTip('Normalize the image')
 
         self.status_bar.addPermanentWidget(self.help_button)
         self.status_bar.addPermanentWidget(self.log_button)
@@ -896,6 +896,9 @@ class CameraGui(QtWidgets.QMainWindow):
     def add_config_gui(self, config):
         config_gui = ConfigGui(config)
         self.config_tab.addTab(config_gui, config.name)
+
+    def add_tab(self, tab, name):
+        self.config_tab.addTab(tab, name)
 
     @command(category='General',
              description='Show/hide the configuration pane')
