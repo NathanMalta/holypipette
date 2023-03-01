@@ -157,10 +157,9 @@ class StageCalHelper():
         '''
         #move the microscope a certain distance forward and up
         currPos = self.stage.position()
-        commandedPos = np.array([currPos[0] + distance, currPos[1] + distance])
+        commandedPos = np.array([currPos[0] + distance, currPos[1] - distance])
         axes = np.array([0, 1], dtype=int)
         self.stage.absolute_move_group(commandedPos, axes)
-
 
         #wait for the microscope to reach the pos, recording frames
         framesAndPoses = []
@@ -196,25 +195,18 @@ class StageCalHelper():
         avgImg = avgImg.astype(np.uint8)
 
         #subtract average from all frames
-        #this is to remove any dirt on the lens
         for frame, _, _ in framesAndPoses:
             frame -= avgImg
 
-        resetFramesNum = 50
-        lastFrame = framesAndPoses[0][0]
+        for i in range(len(framesAndPoses) - 1):
+            currFrame, x_microns, y_microns = framesAndPoses[i + 1]
+            lastFrame, last_x_microns, last_y_microns = framesAndPoses[i]
 
-        for i in range(1, len(framesAndPoses) - 1):
-            currFrame, x_microns, y_microns = framesAndPoses[i]
+            p0 = self.calcOpticalFlowP0(lastFrame)
 
             x_pix, y_pix = self.calcOpticalFlow(lastFrame, currFrame, p0)
-            x_pix = x_pix_total + x_pix
-            y_pix = x_pix_total + y_pix
-
-            if i % resetFramesNum == 0:
-                p0 = self.calcOpticalFlowP0(currFrame)
-                x_pix_total = 0
-                y_pix_total = 0
-                lastFrame = currFrame
+            x_pix_total += x_pix
+            y_pix_total += y_pix
 
             if math.isnan(x_pix) or math.isnan(y_pix): #if no corners can be found with optical flow, nan could be returned.  Don't add this to the list
                 continue
@@ -227,20 +219,27 @@ class StageCalHelper():
                 out.write(vidFrame)
 
 
-            imgPosStagePosList.append([x_pix, y_pix, x_microns, y_microns])
+            imgPosStagePosList.append([x_pix_total, y_pix_total, x_microns, y_microns])
         imgPosStagePosList = np.array(imgPosStagePosList)
         
 
         if video:
             out.release()
         
-        imgPosStagePosList = np.array(imgPosStagePosList, dtype=np.int64)
-        mat, inliers = cv2.estimateAffinePartial2D(imgPosStagePosList[:,2:4], imgPosStagePosList[:,0:2], ransacReprojThreshold=1)
+        #for some reason, estimateAffinePartial2D only works with int64
+        #we can multiply by 100, to preserve 2 decimal places without affecting rotation / scaling portion of affline transform
+        imgPosStagePosList = (imgPosStagePosList).astype(np.int64)
+        print(imgPosStagePosList)
 
-        print("mat: ", mat)
-        #set origin to be the center of the image
+        #compute affine transformation matrix
+        mat, inVsOut = cv2.estimateAffinePartial2D(imgPosStagePosList[:,2:4], imgPosStagePosList[:,0:2])
+
+        #fix intercept - set image center --> stage center
         mat[0,2] = 0
         mat[1,2] = 0
+
+        print('completed optical flow. matrix:')
+        print(mat)
 
         #return transformation matrix
         return mat
@@ -251,14 +250,15 @@ class StageCalHelper():
                                 qualityLevel = 0.1,
                                 minDistance = 10,
                                 blockSize = 10)
-        p0 = cv2.goodFeaturesToTrack(firstFrame, mask = None, **feature_params)
+        p0 = cv2.goodFeaturesToTrack(firstFrame, 70, 0.05, 25)
+        # p0 = cv2.goodFeaturesToTrack(firstFrame, mask = None, **feature_params)
 
         return p0
     
     def calcMotionTranslation(self, lastFrame, currFrame):
         warp_mode = cv2.MOTION_TRANSLATION
         warp_matrix = np.eye(2, 3, dtype=np.float32)
-        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 500,  1e-10)
+        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 5000,  1e-10)
 
         #compute transformation for image translation
         (cc, warp_matrix) = cv2.findTransformECC (lastFrame, currFrame,warp_matrix, warp_mode, criteria)
@@ -274,8 +274,8 @@ class StageCalHelper():
 
     def calcOpticalFlow(self, lastFrame, currFrame, p0):
         #params for optical flow
-        lk_params = dict(winSize  = (10, 10),
-                    maxLevel = 8)
+        lk_params = dict(winSize  = (20, 20),
+                    maxLevel = 20)
 
         # calculate optical flow from first frame
         p1, st, err = cv2.calcOpticalFlowPyrLK(lastFrame, currFrame, p0, None, **lk_params)
