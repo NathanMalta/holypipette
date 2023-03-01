@@ -8,9 +8,9 @@ from holypipette.devices.manipulator import SensapexManip, ScientificaSerial
 from holypipette.devices.pressurecontroller import IBBPressureController, FakePressureController
 from holypipette.devices.manipulator import *
 from holypipette.devices.cellsorter import CellSorterController, CellSorterManip
-from serial import Serial
+import serial
 
-stageSerial = Serial(port='COM6', baudrate=9600, timeout=0.5)
+stageSerial = serial.Serial(port='COM6', baudrate=9600, timeout=10000)
 stageController = ScientificaSerial(stageSerial)
 
 sensapexController = SensapexManip()
@@ -24,8 +24,13 @@ unit = ManipulatorUnit(sensapexController, [1, 2, 3])
 
 amplifier = FakeAmplifier() #MultiClampChannel(channel=1)
 
-pressureSerial = Serial(port='COM15', baudrate=9600, timeout=0)
+pressureSerial = serial.Serial(port='COM15', baudrate=9600, timeout=0)
 pressure = IBBPressureController(channel=1, arduinoSerial=pressureSerial)
 
-cellSorter = CellSorterController()
-cellSorterManip = CellSorterManip()
+# controllerSerial = serial.Serial('COM7', 115200, timeout=2, parity=serial.PARITY_NONE, stopbits=1, 
+#                                     bytesize=8, write_timeout=1, inter_byte_timeout=2)
+# cellSorter = CellSorterController(controllerSerial)
+
+# manipulatorSerial = serial.Serial('COM14', 57600, timeout=2, parity=serial.PARITY_NONE, stopbits=2, 
+#                                             bytesize=8, write_timeout=1, inter_byte_timeout=2)
+# cellSorterManip = CellSorterManip(manipulatorSerial)

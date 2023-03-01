@@ -1,6 +1,7 @@
 import serial
 from .manipulator import Manipulator
 import time
+import threading
 
 __all__ = ['ScientificaSerial']
 
@@ -26,8 +27,16 @@ class ScientificaSerial(Manipulator):
 
     def __init__(self, comPort: serial.Serial):
         self.comPort : serial.Serial = comPort
+        self._lock = threading.Lock()
+        self.current_pos = [0, 0, 0]
+
         self.set_max_accel(100)
         self.set_max_speed(10000)
+
+        #start constantly polling position in a new thread
+        self._polling_thread = threading.Thread(target=self.update_pos_continuous, daemon=True)
+        self._polling_thread.start()
+        self._polling_thread.deamon = True
     
     def set_max_speed(self, speed):
         '''Sets the max speed for the Scientifica Stage.  
@@ -45,31 +54,46 @@ class ScientificaSerial(Manipulator):
         self.comPort.close()
 
     def _sendCmd(self, cmd):
-        self.comPort.write(cmd.encode())
-        time.sleep(0.05) #TODO: replace with something better
+        '''Sends a command to the stage and returns the response
+        '''
 
+        self._lock.acquire()
+        self.comPort.write(cmd.encode())
         resp = self.comPort.read_until(b'\r') #read reply to message
         resp = resp[:-1]
+        self._lock.release()
+
         return resp.decode()
 
     def position(self, axis=None):
         if axis == 1:
-            xpos = self._sendCmd(SerialCommands.GET_X_POS)
-            return int(xpos) / 10.0
+            return self.current_pos[0]
         if axis == 2:
-            ypos = self._sendCmd(SerialCommands.GET_Y_POS)
-            return int(ypos) / 10.0
+            return self.current_pos[1]
         if axis == 3:
-            zpos = self._sendCmd(SerialCommands.GET_Z_POS)
-            return int(zpos) / 10.0
+            return self.current_pos[2]
         if axis == None:
-            xyz = self._sendCmd(SerialCommands.GET_X_Y_Z).split(b'\t')
+            return self.current_pos
+        
+    def update_pos_continuous(self, freq=10):
+        '''constantly polls the device's position and updates the current_pos variable
+        '''
+        while True:
+            startTime = time.time()
+            xyz = self._sendCmd(SerialCommands.GET_X_Y_Z)
+            xyz = xyz.split('\t')
             
-            xPos = int(xyz[0]) / 10.0
-            yPos = int(xyz[1]) / 10.0
-            zPos = int(xyz[2]) / 10.0
+            try:
+                xPos = int(xyz[0]) / 10.0
+                yPos = int(xyz[1]) / 10.0
+                zPos = int(xyz[2]) / 10.0
+                self.current_pos = [xPos, yPos, zPos]
+            except:
+                print('error reading position')
 
-            return [xPos, yPos, zPos]
+            sleepTime = 1 / freq - (time.time() - startTime)
+            if sleepTime > 0:
+                time.sleep(sleepTime)
 
     def absolute_move(self, pos, axis):
         if axis == 1:
@@ -123,3 +147,5 @@ class ScientificaSerial(Manipulator):
 
     def stop(self):
         self._sendCmd(SerialCommands.STOP)
+
+
