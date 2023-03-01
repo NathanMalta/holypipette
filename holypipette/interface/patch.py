@@ -112,3 +112,9 @@ class AutoPatchInterface(TaskInterface):
                       task_description='Contact detection')
     def contact_detection(self):
         self.execute(self.current_autopatcher.contact_detection)
+
+    
+    def set_pressure_near(self):
+        '''puts the pipette under positive pressure to prevent blockages
+        '''
+        self.pressure.set_pressure(self.config.pressure_near)

@@ -20,7 +20,7 @@ class PatchGui(ManipulatorGui):
     patch_command_signal = QtCore.pyqtSignal(MethodType, object)
     patch_reset_signal = QtCore.pyqtSignal(TaskController)
 
-    def __init__(self, camera, pipette_interface, patch_interface,
+    def __init__(self, camera, pipette_interface : PipetteInterface, patch_interface : AutoPatchInterface,
                  with_tracking=False):
         super(PatchGui, self).__init__(camera, pipette_interface,
                                        with_tracking=with_tracking)
@@ -28,6 +28,8 @@ class PatchGui(ManipulatorGui):
         # Note that pipette interface already runs in a thread, we need to use
         # the same for the patch interface
         self.patch_interface = patch_interface
+        self.pipette_interface = pipette_interface
+
         self.patch_interface.moveToThread(pipette_interface.thread())
         self.interface_signals[self.patch_interface] = (self.patch_command_signal,
                                                         self.patch_reset_signal)
@@ -39,6 +41,7 @@ class PatchGui(ManipulatorGui):
         self.pressure_timer = QtCore.QTimer()
         self.pressure_timer.timeout.connect(self.display_pressure)
         self.pressure_timer.start(50)
+        self.patch_interface.set_pressure_near()
 
     def display_pressure(self):
         pressure = self.patch_interface.pressure.get_pressure()
@@ -46,10 +49,10 @@ class PatchGui(ManipulatorGui):
 
     def register_commands(self):
         super(PatchGui, self).register_commands()
-        self.register_mouse_action(Qt.LeftButton, Qt.ShiftModifier,
-                                   self.patch_interface.patch_with_move)
-        self.register_mouse_action(Qt.LeftButton, Qt.ControlModifier,
-                                   self.patch_interface.patch_without_move)
+        # self.register_mouse_action(Qt.LeftButton, Qt.ShiftModifier,
+        #                            self.patch_interface.patch_with_move)
+        # self.register_mouse_action(Qt.LeftButton, Qt.ControlModifier,
+        #                            self.patch_interface.patch_without_move)
         self.register_key_action(Qt.Key_B, None,
                                  self.patch_interface.break_in)
         self.register_key_action(Qt.Key_F2, None,
@@ -99,10 +102,16 @@ class PatchButtons(QtWidgets.QWidget):
         self.addPositionBox('stage position', layout, self.update_stage_pos_labels)
         self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
 
-        #add a box for cal + movement
-        buttonList = [['Calibrate Stage', 'Calibrate Pipette'], ['Set Cell Plane', 'Focus Cell Plane'], ['Focus Pipette Plane'], ['Raise Pipette for Coverslip', 'Lower Pipette to Original']]
-        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.calibrate_manipulator], [self.pipette_interface.set_floor, self.pipette_interface.go_to_floor], [self.pipette_interface.focus_pipette], [self.pipette_interface.raise_pipette, self.pipette_interface.lower_pipette]]
-        self.addButtonList('calibration and movement', layout, buttonList, cmds)
+        #add a box for cal
+        buttonList = [['Calibrate Stage', 'Calibrate Pipette'], ['Set Cell Plane']]
+        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.calibrate_manipulator], [self.pipette_interface.set_floor]]
+        self.addButtonList('calibration', layout, buttonList, cmds)
+
+        #add a box for movement
+        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Raise Pipette for Coverslip', 'Lower Pipette to Original'], ['Center Pipette']]
+        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.pipette_interface.raise_pipette, self.pipette_interface.lower_pipette], [self.pipette_interface.center_pipette]]
+        self.addButtonList('movement', layout, buttonList, cmds)
+
 
         #add a box for patching cmds
         buttonList = [['Patch with move', 'Patch without move'], ['Break in'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
