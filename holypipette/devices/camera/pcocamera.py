@@ -35,12 +35,12 @@ class PcoCamera(Camera):
         self.cam = pco.Camera()
         # self.cam.sdk.set_timestamp_mode('binary & ascii')
         config = {'exposure time': 10e-3,
-                    'roi': (1, 1, 1024, 1024),
+                    'roi': (1, 1, 2048, 2048),
                     'timestamp': 'off',
                     'trigger': 'auto sequence',
                     'acquire': 'auto',
                     'metadata': 'on',
-                    'binning': (2, 2)}
+                    'binning': (1, 1)}
         self.cam.configuration = config
 
         self.cam.record(number_of_images=10, mode='ring buffer') #use "ring buffer" mode for continuous streaming from camera
