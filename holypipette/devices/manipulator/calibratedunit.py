@@ -68,17 +68,6 @@ class CalibrationError(Exception):
         return self.message
 
 
-# class Objective(object):
-#     '''
-#     An objective is defined by a magnification factor (4, 20, 40x),
-#     an offset for the focal plane, and a conversion factor from um to px
-#     (which is camera-dependent).
-#     '''
-#     def __init__(self, magnification, factor, offset):
-#         self.magnification = magnification
-#         self.factor = factor
-#         self.offset = offset
-
 class CalibratedUnit(ManipulatorUnit):
     def __init__(self, unit, stage=None, microscope=None, camera=None,
                  config=None):
@@ -127,7 +116,7 @@ class CalibratedUnit(ManipulatorUnit):
         self.emperical_offset = np.zeros(3) # offset for pipette position in px based on deep learning model
 
         #setup pipette calibration helper class
-        self.pipetteCalHelper = PipetteCalHelper(unit, camera)
+        self.pipetteCalHelper = PipetteCalHelper(unit, self.microscope, camera, stage)
         self.pipetteFocusHelper = PipetteFocusHelper(unit, camera)
 
     def save_state(self):
@@ -169,7 +158,7 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         return dot(self.M, pos_microns) + self.r0 - self.emperical_offset
 
-    def reference_position(self, include_offest = True):
+    def reference_position(self, include_offset = True):
         '''
         Position of the pipette in pixels (camera coordinate frame)
 
@@ -180,7 +169,7 @@ class CalibratedUnit(ManipulatorUnit):
         # if not self.calibrated:
         #     raise CalibrationError
         pos_um = self.position() # position vector (um) in manipulator unit system
-        if include_offest:
+        if include_offset:
             pos_pixels = self.um_to_pixels(pos_um) + self.stage.reference_position() + self.emperical_offset
         else:
             pos_pixels = self.um_to_pixels(pos_um) + self.stage.reference_position()
@@ -213,7 +202,7 @@ class CalibratedUnit(ManipulatorUnit):
             return
         
         pos_pixels_emperical = np.median(emperical_poses, axis=0)
-        pos_pixels_theoretical = self.reference_position(include_offest=False)[0:2]
+        pos_pixels_theoretical = self.reference_position(include_offset=False)[0:2]
 
         print('Theoretical position: ', pos_pixels_theoretical)
         print('Emperical position: ', pos_pixels_emperical)
@@ -224,8 +213,11 @@ class CalibratedUnit(ManipulatorUnit):
         print('Emperical offset (pix): ', self.emperical_offset)
         print('Emperical offset (um): ', self.pixels_to_um_relative(self.emperical_offset))
 
+        #recalculate setpoint after offset correction
+        pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) # position vector (um) in manipulator unit system
+
         #move to emperical position
-        self.absolute_move(pos_micron - self.pixels_to_um_relative(self.emperical_offset), blocking=True)
+        self.absolute_move(pos_micron, blocking=True)
 
     def focus(self):
         '''
@@ -276,33 +268,40 @@ class CalibratedUnit(ManipulatorUnit):
             # The third axis is in um, the first two in pixels, hence the odd formula
             p.append(((M[0,axis]**2 + M[1,axis]**2))**.5) #TODO: is this correct? 
         return p
+    
+    def record_cal_point(self):
+        self.pipetteCalHelper.record_cal_point()
 
-    def calibrate(self): #TODO: Z-Axis calibration?
+    def finish_calibration(self): #TODO: Z-Axis calibration?
         '''
         Automatic calibration of the pipette manipulator.
         '''
         
         # move the pipette and create a calibration matrix (pix -> um)
-        mat, initPos = self.pipetteCalHelper.calibrate(dist=self.config.pipette_diag_move)
-        self.stage.pipette_cal_position = self.stage.position() #update the position the pipette was calibrated at
+        mat = self.pipetteCalHelper.calibrate()
+        
+        #make matrix 4x4 for inverse
+        mat = np.vstack((mat, np.array([0,0,0,1])))
 
-        # make mat 3x3
-        mat = np.append(mat, np.array([[0,0,1]]), axis=0)
-        print(f'calibration matrix: {mat}')
+        self.stage.pipette_cal_position = self.stage.position() #update the position the pipette was calibrated at
 
         # *** Compute the (pseudo-)inverse ***
         mat_inv = pinv(mat)
 
+        print(f'calibration matrix: {mat}')
+        print('inv : ', mat_inv)
+
         # store r0 and r0_inv
-        self.r0 = np.append(mat[0:2, 2], 0) #um -> pixels offset
-        self.r0_inv = np.append(mat_inv[0:2, 2], self.microscope.position() - self.position(2)) #pixels -> um offset
+        self.r0 = mat[0:3, 3] #um -> pixels offset
+        self.r0_inv = mat_inv[0:3, 3] #pixels -> um offset
 
         #for M and Minv, we only want the upper 2x2 matrix (b/c assumption that z axis is equivilant), the rest of the matrix is just the identity
-        self.M = np.eye(3,3)
-        self.M[0:2,0:2] = mat[0:2, 0:2]
+        #just 3x3 portion of M for self.M
+        self.M = mat[0:3, 0:3]
 
-        self.Minv = np.eye(3,3)
-        self.Minv[0:2,0:2] = mat_inv[0:2, 0:2]
+        #just 3x3 portion of Minv
+        self.Minv = mat_inv[0:3, 0:3]
+
 
         #check for nan values (invalid cal)
         if isnan(self.M).any() or isnan(self.Minv).any():

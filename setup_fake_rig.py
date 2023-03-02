@@ -11,7 +11,7 @@ from holypipette.devices.cellsorter import FakeCellSorterController, FakeCellSor
 
 controller = FakeManipulator(min=[-4096, -4096, -2000],
                              max=[4096, 4096, 2000])
-pipetteManip = FakePipetteManipulator(min=[-4096, -4096, -3000],
+pipetteManip = FakeManipulator(min=[-4096, -4096, -3000],
                                       max=[4096, 4096, 1000])
 stage = ManipulatorUnit(controller, [1, 2])
 
