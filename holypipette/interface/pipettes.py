@@ -49,6 +49,18 @@ class PipetteInterface(TaskInterface):
         pass #TODO: unused?
 
     @command(category='Manipulators',
+             description='Record a calibration point at the current position',
+             default_arg=10)
+    def record_cal_point(self, none):
+        self.calibrated_unit.record_cal_point()
+    
+    @command(category='Manipulators',
+             description='Finish calibration',
+             default_arg=10)
+    def finish_calibration(self, none):
+        self.calibrated_unit.finish_calibration()
+
+    @command(category='Manipulators',
              description='Move pipette in x direction by {:.0f}μm',
              default_arg=10)
     def move_pipette_x(self, distance):

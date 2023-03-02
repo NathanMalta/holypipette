@@ -209,7 +209,7 @@ class FakePipette():
 
     def __init__(self, manipulator:Manipulator, microscope_pixels_per_micron, stage_to_pipette=np.eye(4,4), pipetteAngle=np.pi/6):
 
-        stage_to_pipette = np.array([[0.7, -0.3, 0, 0], [0.3, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+        stage_to_pipette = np.array([[0.7, -0.3, 0, 0], [0.3, 1, 0, 0], [0, 0, -1, 700], [0, 0, 0, 1]])
 
         # rotation matrix to make the x-axis to parallel to the pipette, rather than the stage
         # note: this is the rotation matrix about the y-axis, but only rotating the x axis (not z)
@@ -249,7 +249,7 @@ class FakePipette():
         stage_img_y = stage_y * self.pixels_per_micron
 
         #get pipette micron coords
-        pipette_x, pipette_y, pipette_z = self.manipulator.raw_position()
+        pipette_x, pipette_y, pipette_z = self.manipulator.position()
         pipette_pos_h = np.array([pipette_x, pipette_y, pipette_z, 1])
 
         #get pipette position in stage coordinates

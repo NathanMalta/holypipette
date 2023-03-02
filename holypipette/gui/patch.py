@@ -103,8 +103,8 @@ class PatchButtons(QtWidgets.QWidget):
         self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
 
         #add a box for cal
-        buttonList = [['Calibrate Stage', 'Calibrate Pipette'], ['Set Cell Plane']]
-        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.calibrate_manipulator], [self.pipette_interface.set_floor]]
+        buttonList = [['Calibrate Stage','Set Cell Plane'], ['Add Pipette Cal Point', 'Finish Pipette Cal']]
+        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.set_floor], [self.pipette_interface.record_cal_point, self.pipette_interface.finish_calibration]]
         self.addButtonList('calibration', layout, buttonList, cmds)
 
         #add a box for movement

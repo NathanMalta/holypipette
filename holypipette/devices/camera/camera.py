@@ -115,7 +115,7 @@ class AcquisitionThread(threading.Thread):
         while self.running:
             snap_time = time.time()
             try:
-                frame = self.camera.raw_snap()
+                frame = self.camera.snap()
             except Exception as ex:
                 print('something went wrong acquiring an image, waiting for 100ms: ')
                 traceback.print_exception(type(ex), ex, ex.__traceback__)
@@ -155,6 +155,13 @@ class Camera(object):
         self.height = 1000
         self.flipped = False # Horizontal flip
 
+        self.stop_show_time = 0
+        self.point_to_show = None
+    
+    def show_point(self, point, duration=1.5):
+        self.point_to_show = point
+        self.stop_show_time = time.time() + duration
+
     def start_acquisition(self):
         self._acquisition_thread = AcquisitionThread(camera=self,
                                                      queues=[self._last_frame_queue])
@@ -183,6 +190,12 @@ class Camera(object):
         self.flipped = not self.flipped
 
     def preprocess(self, img):
+        if time.time() - self.stop_show_time < 0:
+            #convert to rgb
+            if len(img.shape)==2:
+                img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+            if self.point_to_show is not None:
+                img = cv2.circle(img, self.point_to_show, 10, (255, 0, 0), 3)
         if self.flipped:
             if len(img.shape)==2:
                 return np.array(img[:,::-1])
