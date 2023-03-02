@@ -144,7 +144,8 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         Converts pixel coordinates to pipette um.
         '''
-        return dot(self.Minv, pos_pixels + self.emperical_offset) + self.r0_inv
+        # return dot(self.Minv, pos_pixels + self.emperical_offset) + self.r0_inv
+        return dot(self.Minv, pos_pixels) + self.r0_inv
     
     def pixels_to_um_relative(self, pos_pixels):
         '''
@@ -187,6 +188,9 @@ class CalibratedUnit(ManipulatorUnit):
 
         if np.isnan(np.array(pos_pixels)).any():
             raise RuntimeError("can not move to nan location.")
+        
+        print(f'Move position: {pos_pixels}')
+        print(f'Reference position: {self.reference_position()}')
         pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) # position vector (um) in manipulator unit system
 
         self.absolute_move(pos_micron, blocking=True)
@@ -383,8 +387,7 @@ class CalibratedStage(CalibratedUnit):
         '''Returns the offset (in pixels) of the stage compared to where it was when calibrated
         '''
         #get delta in um
-        posDelta = self.unit.position() - self.pipette_cal_position
-
+        posDelta = self.unit.position()
         print('self.Minv: ', self.Minv, 'posDelta: ', posDelta, 'self.r0_inv: ', self.r0_inv)
 
         #convert to pixels

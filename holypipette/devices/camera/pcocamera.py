@@ -82,13 +82,13 @@ class PcoCamera(Camera):
         self.cam = pco.Camera()
         
         config = {'exposure time': 10e-3,
-                    'roi': (0, 0, 1024, 1024),
+                    'roi': (0, 0, 2048, 2048),
                     'timestamp': 'off',
                     'pixel rate': 500_000_000,
                     'trigger': 'auto sequence',
                     'acquire': 'auto',
                     'metadata': 'on',
-                    'binning': (2, 2)}
+                    'binning': (1, 1)}
         self.cam.configuration = config
 
         self.cam.record(number_of_images=10, mode='ring buffer')

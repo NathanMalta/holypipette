@@ -88,6 +88,11 @@ class FakeCalCamera(Camera):
         # Use the part of the image under the microscope
         stage_x, stage_y, stage_z = self.stageManip.position_group([1, 2, 3])
 
+        startPos = [-235000, 55000, 285000]
+        stage_x = stage_x - startPos[0]
+        stage_y = stage_y - startPos[1]
+        stage_z = stage_z - startPos[2]
+
         #get background at current stage position
         img_x = -stage_x * self.pixels_per_micron
         img_y = -stage_y * self.pixels_per_micron
@@ -209,14 +214,17 @@ class FakePipette():
 
     def __init__(self, manipulator:Manipulator, microscope_pixels_per_micron, stage_to_pipette=np.eye(4,4), pipetteAngle=np.pi/6):
 
-        stage_to_pipette = np.array([[0.7, -0.3, 0, 0], [0.3, 1, 0, 0], [0, 0, -1, 700], [0, 0, 0, 1]])
+        stage_to_pipette = np.array([[0.7,  -0.3,   0,      0], 
+                                     [0.3,  1,      0,      0], 
+                                     [0,    0,      -(1/2), 600], 
+                                     [0,    0,      0,      1]])
 
         # rotation matrix to make the x-axis to parallel to the pipette, rather than the stage
         # note: this is the rotation matrix about the y-axis, but only rotating the x axis (not z)
         # creates a non-orthogonal coordinate system, but that's the same as the real pipette  
         self.rot_mat  = np.array([[np.cos(pipetteAngle), 0, 0, 0], 
                             [0, 1, 0, 0], 
-                            [-np.sin(pipetteAngle), 0, 1, 0], 
+                            [np.sin(pipetteAngle), 0, 1, 0], 
                             [0, 0, 0, 1]])
 
         stage_to_pipette = np.matmul(np.linalg.inv(self.rot_mat), stage_to_pipette)
