@@ -193,7 +193,7 @@ class CalibratedUnit(ManipulatorUnit):
         print(f'Reference position: {self.reference_position()}')
         pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) # position vector (um) in manipulator unit system
 
-        self.absolute_move(pos_micron, blocking=True)
+        self.absolute_move(pos_micron)
         
         emperical_poses = []
         for i in range(10):
@@ -206,7 +206,7 @@ class CalibratedUnit(ManipulatorUnit):
             return
         
         pos_pixels_emperical = np.median(emperical_poses, axis=0)
-        pos_pixels_theoretical = self.reference_position(include_offset=False)[0:2]
+        pos_pixels_theoretical = self.reference_position()[0:2]
 
         print('Theoretical position: ', pos_pixels_theoretical)
         print('Emperical position: ', pos_pixels_emperical)
@@ -215,10 +215,11 @@ class CalibratedUnit(ManipulatorUnit):
         #update offset
         self.emperical_offset[0:2] = pos_pixels_emperical - pos_pixels_theoretical
         print('Emperical offset (pix): ', self.emperical_offset)
-        print('Emperical offset (um): ', self.pixels_to_um_relative(self.emperical_offset))
+              
+        correction = self.pixels_to_um_relative(self.emperical_offset)
 
         #recalculate setpoint after offset correction
-        pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) # position vector (um) in manipulator unit system
+        pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) - correction
 
         #move to emperical position
         self.absolute_move(pos_micron, blocking=True)
