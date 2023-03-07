@@ -104,7 +104,7 @@ class FocusUpdater(Thread):
             self.lastFrame = self.camera.get_frame_no()
             
             #get focus score from frame
-            _, frametime, _, img = self.camera._last_frame_queue[0]
+            _, frametime, _, img = self.camera.raw_frame_queue[0]
             score = self._getFocusScore(img)
 
             #append to list
@@ -165,7 +165,7 @@ class StageCalHelper():
         framesAndPoses = []
         currPos = self.stage.position()
         startPos = currPos
-        _, _, _, firstFrame = self.camera._last_frame_queue[0]
+        _, _, _, firstFrame = self.camera.raw_frame_queue[0]
         p0 = self.calcOpticalFlowP0(firstFrame)
         while abs(currPos[0] - commandedPos[0]) > 0.3 or abs(currPos[1] - commandedPos[1]) > 0.3:
             while self.lastFrameNo == self.camera.get_frame_no():
@@ -174,7 +174,7 @@ class StageCalHelper():
             currPos = self.stage.position()
 
             #get latest img
-            _, _, _, frame = self.camera._last_frame_queue[0]
+            _, _, _, frame = self.camera.raw_frame_queue[0]
 
             framesAndPoses.append([frame.copy(), currPos[0] - startPos[0], currPos[1] - startPos[1]])
 

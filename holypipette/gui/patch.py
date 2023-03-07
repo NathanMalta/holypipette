@@ -51,8 +51,8 @@ class PatchGui(ManipulatorGui):
         super(PatchGui, self).register_commands()
         # self.register_mouse_action(Qt.LeftButton, Qt.ShiftModifier,
         #                            self.patch_interface.patch_with_move)
-        # self.register_mouse_action(Qt.LeftButton, Qt.ControlModifier,
-        #                            self.patch_interface.patch_without_move)
+        self.register_mouse_action(Qt.LeftButton, Qt.NoModifier,
+                                   self.patch_interface.add_cell)
         self.register_key_action(Qt.Key_B, None,
                                  self.patch_interface.break_in)
         self.register_key_action(Qt.Key_F2, None,
@@ -78,8 +78,6 @@ class TrackingPatchGui(PatchGui):
                                  self.patch_interface.sequential_patching)
         self.register_key_action(Qt.Key_F8, None,
                                  self.patch_interface.contact_detection)
-        self.register_mouse_action(Qt.RightButton, None,
-                                   self.camera_interface.track_object)
 
 class PatchButtons(QtWidgets.QWidget):
     def nothing(self):
@@ -112,13 +110,15 @@ class PatchButtons(QtWidgets.QWidget):
         cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.pipette_interface.raise_pipette, self.pipette_interface.lower_pipette], [self.pipette_interface.center_pipette]]
         self.addButtonList('movement', layout, buttonList, cmds)
 
-
         #add a box for patching cmds
-        buttonList = [['Patch with move', 'Patch without move'], ['Break in'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
-        cmds = [[self.patch_interface.patch_with_move, self.patch_interface.patch_without_move], [self.patch_interface.break_in], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
+        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch', 'Continue'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
+        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch, self.do_nothing], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
         self.addButtonList('patching', layout, buttonList, cmds)
         
         self.setLayout(layout)
+
+    def do_nothing(self):
+        pass # a dummy function for buttons that aren't implemented yet
 
     def run_command(self, cmd):
 

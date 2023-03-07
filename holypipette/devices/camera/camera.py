@@ -98,9 +98,10 @@ class FileWriteThread(threading.Thread): # saves frames individually
 
 
 class AcquisitionThread(threading.Thread):
-    def __init__(self, camera, queues):
+    def __init__(self, camera, queues, raw_queues):
         self.camera = camera
         self.queues = queues
+        self.raw_queues = raw_queues
         self.running = True
 
         threading.Thread.__init__(self, name='image_acquire_thread')
@@ -115,7 +116,7 @@ class AcquisitionThread(threading.Thread):
         while self.running:
             snap_time = time.time()
             try:
-                frame = self.camera.snap()
+                raw, processed = self.camera.snap()
             except Exception as ex:
                 print('something went wrong acquiring an image, waiting for 100ms: ')
                 traceback.print_exception(type(ex), ex, ex.__traceback__)
@@ -124,7 +125,10 @@ class AcquisitionThread(threading.Thread):
                 continue
             # Put image into queues for disk storage and display
             for queue in self.queues:
-                queue.append((last_frame, datetime.datetime.now(), snap_time - start_time, frame))
+                queue.append((last_frame, datetime.datetime.now(), snap_time - start_time, processed))
+            for queue in self.raw_queues:
+                queue.append((last_frame, datetime.datetime.now(), snap_time - start_time, raw))
+
             last_frame += 1
             acquired_frames += 1
             if snap_time - last_report > 1:
@@ -148,6 +152,7 @@ class Camera(object):
         super(Camera, self).__init__()
         self._file_queue = None
         self._last_frame_queue = collections.deque(maxlen=1)
+        self.raw_frame_queue = collections.deque(maxlen=1)
         self._acquisition_thread = None
         self._file_thread = None
         self._debug_write_delay = 0
@@ -157,6 +162,7 @@ class Camera(object):
 
         self.stop_show_time = 0
         self.point_to_show = None
+        self.cell_list = []
     
     def show_point(self, point, duration=1.5):
         self.point_to_show = point
@@ -164,7 +170,8 @@ class Camera(object):
 
     def start_acquisition(self):
         self._acquisition_thread = AcquisitionThread(camera=self,
-                                                     queues=[self._last_frame_queue])
+                                                     queues=[self._last_frame_queue],
+                                                     raw_queues=[self.raw_frame_queue])
         self._acquisition_thread.start()
     
     def stop_acquisition(self):
@@ -190,12 +197,21 @@ class Camera(object):
         self.flipped = not self.flipped
 
     def preprocess(self, img):
+        #convert to rgb
+        if len(img.shape)==2:
+            img = cv2.cvtColor(img.copy(), cv2.COLOR_GRAY2RGB)
+        else:
+            img = img.copy()
+
+        #draw a temporary point if needed (used to show pipette tip during cal)
         if time.time() - self.stop_show_time < 0:
-            #convert to rgb
-            if len(img.shape)==2:
-                img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
             if self.point_to_show is not None:
                 img = cv2.circle(img, self.point_to_show, 10, (255, 0, 0), 3)
+
+        #draw cell outlines
+        for cell in self.cell_list:
+            img = cv2.circle(img, cell, 10, (0, 255, 0), 3)
+        
         if self.flipped:
             if len(img.shape)==2:
                 return np.array(img[:,::-1])
@@ -212,9 +228,10 @@ class Camera(object):
 
     def snap(self):
         '''
-        Returns the current image
+        Returns a processed and a raw image
         '''
-        return self.preprocess(self.raw_snap())
+        raw = self.raw_snap()
+        return raw, self.preprocess(raw)
 
     def raw_snap(self):
         return None
