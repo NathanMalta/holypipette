@@ -27,7 +27,7 @@ class PipetteCalHelper():
     def record_cal_point(self):
         '''Records a calibration point by moving the pipette to the center of the pipette in the current frame
         '''
-        _, _, _, frame = self.camera._last_frame_queue[0]
+        _, _, _, frame = self.camera.raw_frame_queue[0]
         pos_pix = self.pipetteFinder.find_pipette(frame)
         if pos_pix != None:
             frame = cv2.circle(frame, pos_pix, 10, 0, 2)

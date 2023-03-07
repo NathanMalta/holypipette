@@ -7,7 +7,9 @@ import numpy as np
 from holypipette.config import Config, NumberWithUnit, Number, Boolean
 from holypipette.interface import TaskInterface, command, blocking_command
 from holypipette.controller import AutoPatcher
-
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import Qt
+import time
 
 __all__ = ['AutoPatchInterface', 'PatchConfig']
 
@@ -28,7 +30,7 @@ class PatchConfig(Config):
     min_R = NumberWithUnit(2e6, bounds=(0, 1000e6), doc='Minimum normal resistance', unit='MΩ', magnitude=1e6)
     max_R = NumberWithUnit(25e6, bounds=(0, 1000e6), doc='Maximum normal resistance', unit='MΩ', magnitude=1e6)
     max_cell_R = NumberWithUnit(300e6, bounds=(0, 1000e6), doc='Maximum cell resistance', unit='MΩ', magnitude=1e6)
-    cell_distance = NumberWithUnit(10, bounds=(0, 100), doc='Initial distance above target cell', unit='μm')
+    cell_distance = NumberWithUnit(30, bounds=(0, 100), doc='Initial distance above target cell', unit='μm')
     max_distance = NumberWithUnit(20, bounds=(0, 100), doc='Maximum movement during approach', unit='μm')
 
     max_R_increase = NumberWithUnit(1e6, bounds=(0, 100e6), doc='Increase in resistance indicating obstruction', unit='MΩ', magnitude=1e6)
@@ -64,25 +66,57 @@ class AutoPatchInterface(TaskInterface):
                                     config=self.config)
         self.current_autopatcher = autopatcher
 
+        self.is_selecting_cells = False
+        self.cells_to_patch = []
+
+        #call update_camera_cell_list every 0.1 seconds using a QTimer
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.update_camera_cell_list)
+        self.timer.start(50)
+        
+
     @blocking_command(category='Patch', description='Break into the cell',
                       task_description='Breaking into the cell')
     def break_in(self):
         self.execute(self.current_autopatcher.break_in)
 
+    def start_selecting_cells(self):
+        self.is_selecting_cells = True
+
+    def remove_last_cell(self):
+        if len(self.cells_to_patch) > 0:
+            self.cells_to_patch = self.cells_to_patch[:-1]
+
+    @command(category='Patch', description='Add a mouse position to the list of cells to patch')
+    def add_cell(self, position):
+        #add half the size of the camera image to the position to get the center of the cell
+        position = np.array(position)
+        position[0] += self.current_autopatcher.calibrated_unit.camera.width/2
+        position[1] += self.current_autopatcher.calibrated_unit.camera.height/2
+        print(f'adding cell... {self.is_selecting_cells}')
+        if self.is_selecting_cells:
+            print('Adding cell at', position, 'to list of cells to patch')
+            stage_pos_pixels = self.current_autopatcher.calibrated_stage.reference_position()
+            stage_pos_pixels[0:2] -= position
+            self.cells_to_patch.append(np.array(stage_pos_pixels))
+            self.is_selecting_cells = False
+
+    def update_camera_cell_list(self):
+        self.current_autopatcher.calibrated_unit.camera.cell_list = []
+        for cell in self.cells_to_patch:
+            camera_pos = -cell + self.current_autopatcher.calibrated_stage.reference_position()
+            self.current_autopatcher.calibrated_unit.camera.cell_list.append(camera_pos[0:2].astype(int))
+            
+
     @blocking_command(category='Patch', description='Move to cell and patch it',
                       task_description='Moving to cell and patching it')
-    def patch_with_move(self, position):
+    def patch(self):
+        cell = self.cells_to_patch[0]
         self.execute(self.current_autopatcher.patch,
-                     argument=np.array(position))
-
-    @blocking_command(category='Patch',
-                      description='Patch cell at current position',
-                      task_description='Patching cell')
-    def patch_without_move(self, position=None):
-        # If this command is linked to a mouse click, it will receive the
-        # position as an argument -- we simply ignore it
-        self.execute(self.current_autopatcher.patch)
-
+                     argument=cell)
+        time.sleep(2)
+        self.cells_to_patch = self.cells_to_patch[1:]
+        
     @command(category='Patch',
              description='Store the position of the washing bath',
              success_message='Cleaning path position stored')

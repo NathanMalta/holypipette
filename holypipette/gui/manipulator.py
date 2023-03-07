@@ -180,7 +180,7 @@ class ManipulatorGui(CameraGui):
                                    self.interface.move_pipette)
 
         # Move stage by clicking
-        self.register_mouse_action(Qt.LeftButton, Qt.NoModifier,
+        self.register_mouse_action(Qt.RightButton, Qt.NoModifier,
                                    self.interface.move_stage)
 
         # Microscope control

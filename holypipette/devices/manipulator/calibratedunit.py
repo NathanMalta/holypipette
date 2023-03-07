@@ -144,14 +144,21 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         Converts pixel coordinates to pipette um.
         '''
-        # return dot(self.Minv, pos_pixels + self.emperical_offset) + self.r0_inv
-        return dot(self.Minv, pos_pixels) + self.r0_inv
+        if self.Minv.shape[1] == 2: #2x2 stage movement
+            xy = dot(self.Minv, pos_pixels[0:2]) + self.r0_inv
+            return np.array([xy[0], xy[1], 0])
+        else: #3x3 pipette movement
+            return dot(self.Minv, pos_pixels) + self.r0_inv
     
     def pixels_to_um_relative(self, pos_pixels):
         '''
         Converts pixel coordinates to pipette um.
         '''
-        return dot(self.Minv, pos_pixels)
+        if self.Minv.shape[1] == 2: #2x2 stage movement
+            xy = dot(self.Minv, pos_pixels[0:2])
+            return np.array([xy[0], xy[1], 0])
+        else: #3x3 pipette movement
+            return dot(self.Minv, pos_pixels)
     
     def um_to_pixels(self, pos_microns):
         '''
@@ -194,13 +201,17 @@ class CalibratedUnit(ManipulatorUnit):
         pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) # position vector (um) in manipulator unit system
 
         self.absolute_move(pos_micron)
+
+        if isinstance(self, CalibratedStage) or isinstance(self, FixedStage):
+            return
         
         emperical_poses = []
         for i in range(10):
-            pos = self.pipetteCalHelper.pipetteFinder.find_pipette(self.camera.snap())
+            _, _, _, frame = self.camera.raw_frame_queue[0]
+            pos = self.pipetteCalHelper.pipetteFinder.find_pipette(frame)
             if pos != None:
                 emperical_poses.append([pos[0], pos[1]])
-
+        
         if len(emperical_poses) == 0:
             print('No pipette found in image, can\'t run correction')
             return
@@ -259,7 +270,7 @@ class CalibratedUnit(ManipulatorUnit):
         r = np.array(r)
         r = r + np.array([self.camera.width // 2, self.camera.height // 2, 0])
 
-        self.reference_move(r, safe = True) # Or relative move in manipulator coordinates, first axis (faster)
+        self.reference_move(r) # Or relative move in manipulator coordinates, first axis (faster)
 
 
     def pixel_per_um(self, M=None):
@@ -389,7 +400,6 @@ class CalibratedStage(CalibratedUnit):
         '''
         #get delta in um
         posDelta = self.unit.position()
-        print('self.Minv: ', self.Minv, 'posDelta: ', posDelta, 'self.r0_inv: ', self.r0_inv)
 
         #convert to pixels
         posDelta = dot(self.M, posDelta) + self.r0

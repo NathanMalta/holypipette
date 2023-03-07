@@ -63,6 +63,17 @@ class AutoPatcher(TaskController):
         Runs the automatic patch-clamp algorithm, including manipulator movements.
         '''
         try:
+
+            #check for stage and pipette calibration
+            if not self.calibrated_unit.calibrated:
+                raise AutopatchError("Pipette not calibrated")
+            if not self.calibrated_stage.calibrated:
+                raise AutopatchError("Stage not calibrated")
+
+            #check for floor set
+            if self.microscope.floor_Z is None:
+                raise AutopatchError("Cell Plane not set")
+
             self.amplifier.start_patch()
 
             # Pressure level 1
@@ -71,9 +82,10 @@ class AutoPatcher(TaskController):
             # Check initial resistance
             #self.pressure.set_pressure(0)
             self.amplifier.auto_pipette_offset()
-            self.sleep(4.)
+            # self.sleep(4.) #TODO is this needed?
             R = self.amplifier.resistance()
             self.debug("Resistance:" + str(R/1e6))
+
             if R < self.config.min_R:
                 raise AutopatchError("Resistance is too low (broken tip?)")
             elif R > self.config.max_R:
@@ -85,9 +97,21 @@ class AutoPatcher(TaskController):
             #R = self.amplifier.resistance()
 
             if move_position is not None:
-                # Move pipette to target
-                self.calibrated_unit.safe_move(np.array([move_position[0], move_position[1],self.microscope.position()]) + self.microscope.up_direction * np.array([0, 0, 1.]) * self.config.cell_distance, recalibrate=False)
+                #Move stage such that the pipette is in the middle of the field of view
+                print('Moving stage to', move_position)
+                self.calibrated_stage.safe_move(np.array([move_position[0], move_position[1], 0]))
+                self.calibrated_stage.wait_until_still()
+
+                #move to cell plane
+                self.microscope.absolute_move(self.microscope.floor_Z + self.config.cell_distance)
+                self.microscope.wait_until_still()
+
+                # Move pipette to target (middle of the field of view)
+                self.calibrated_unit.safe_move(np.array([0, 0, self.microscope.position()]))
                 self.calibrated_unit.wait_until_still()
+                
+
+                return
 
                 # Check resistance again
                 Rnow = self.amplifier.resistance()
