@@ -103,11 +103,13 @@ class AutoPatcher(TaskController):
                 self.calibrated_stage.wait_until_still()
 
                 #move to cell plane
-                self.microscope.absolute_move(self.microscope.floor_Z + self.config.cell_distance)
+                self.microscope.absolute_move(self.microscope.floor_Z)
                 self.microscope.wait_until_still()
 
                 # Move pipette to target (middle of the field of view)
-                self.calibrated_unit.safe_move(np.array([0, 0, self.microscope.position()]))
+
+                pipette_setpoint = np.array([0, 0, self.microscope.position() + self.config.cell_distance])
+                self.calibrated_unit.safe_move(pipette_setpoint)
                 self.calibrated_unit.wait_until_still()
                 
 
