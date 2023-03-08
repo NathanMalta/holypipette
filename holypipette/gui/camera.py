@@ -621,7 +621,7 @@ class CameraGui(QtWidgets.QMainWindow):
         self.register_key_action(Qt.Key_Question, None, self.help_keypress)
         self.register_key_action(Qt.Key_L, None, self.log_keypress)
         self.register_key_action(Qt.Key_N, None, self.camera_interface.normalize)
-        self.register_key_action(Qt.Key_Escape, None, self.exit)
+        self.register_key_action(Qt.Key_Q, Qt.ControlModifier, self.exit)
         self.register_key_action(Qt.Key_Plus, None,
                                  self.camera_interface.increase_exposure,
                                  default_doc=False)

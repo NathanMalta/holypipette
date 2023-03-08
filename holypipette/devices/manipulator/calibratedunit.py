@@ -239,6 +239,8 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         Move the microscope so as to put the pipette tip in focus
         '''
+        if not self.calibrated:
+            raise CalibrationError('Pipette not calibrated')
         self.microscope.absolute_move(self.reference_position()[2])
         self.microscope.wait_until_still()
 
