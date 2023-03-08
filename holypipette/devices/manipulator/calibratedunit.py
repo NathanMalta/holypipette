@@ -201,6 +201,7 @@ class CalibratedUnit(ManipulatorUnit):
         pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) # position vector (um) in manipulator unit system
 
         self.absolute_move(pos_micron)
+        self.wait_until_still()
 
         if isinstance(self, CalibratedStage) or isinstance(self, FixedStage):
             return
