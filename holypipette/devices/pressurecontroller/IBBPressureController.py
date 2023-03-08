@@ -43,9 +43,11 @@ class IBBPressureController(PressureController):
         self.responseDeamon.setDaemon(True) #make sure thread dies with main thread
         self.responseDeamon.start()
 
+        time.sleep(2) #wait for arduino to boot up
+
         #set initial configuration of pressure controller
         self.set_ATM(False)
-        self.set_pressure(0)
+        self.set_pressure(20)
 
     def autodetectSerial(self):
         '''Use VID and name of serial devices to figure out which one is the IBB Pressure box
@@ -95,6 +97,7 @@ class IBBPressureController(PressureController):
         '''Tell pressure controller to go to a given setpoint pressure in native DAC units
         '''
         self.setpoint_raw = raw_pressure
+        print(f"Setting pressure to {self.nativeToMbar(raw_pressure)} mbar (raw: {raw_pressure})")
 
         cmd = f"set {self.channel} {raw_pressure}\n"
         self.serial.write(bytes(cmd, 'ascii'))
@@ -114,7 +117,12 @@ class IBBPressureController(PressureController):
     def get_setpoint_raw(self):
         '''Gets the current setpoint in native DAC units
         '''
+        print(f"Current setpoint: {self.nativeToMbar(self.setpoint_raw)} mbar (raw: {self.setpoint_raw})")
         return self.setpoint_raw
+    
+    def get_pressure(self):
+        return self.get_setpoint() #maybe add a pressure sensor down the line?
+    
 
     def pulse(self, delayMs):
         '''Tell the onboard arduino to pulse pressure for a certain period of time
