@@ -4,7 +4,6 @@ import numpy as np
 from holypipette.devices.amplifier.amplifier import Amplifier
 from holypipette.devices.manipulator.calibratedunit import CalibratedUnit
 from holypipette.devices.manipulator.microscope import Microscope
-from holypipette.devices.pressurecontroller.pressurecontroller import PressureController
 
 from holypipette.config import Config
 
@@ -20,7 +19,7 @@ class AutopatchError(Exception):
 
 
 class AutoPatcher(TaskController):
-    def __init__(self, amplifier : Amplifier, pressure : PressureController, calibrated_unit : CalibratedUnit, microscope : Microscope, calibrated_stage, config : Config):
+    def __init__(self, amplifier : Amplifier, pressure, calibrated_unit : CalibratedUnit, microscope : Microscope, calibrated_stage, config : Config):
         super(AutoPatcher, self).__init__()
         self.config = config
         self.amplifier = amplifier
@@ -83,6 +82,8 @@ class AutoPatcher(TaskController):
             #self.pressure.set_pressure(0)
             self.amplifier.auto_pipette_offset()
             # self.sleep(4.) #TODO is this needed?
+
+            # set amplifier to resistance mode
             R = self.amplifier.resistance()
             self.debug("Resistance:" + str(R/1e6))
 
@@ -108,12 +109,18 @@ class AutoPatcher(TaskController):
 
                 # Move pipette to target (middle of the field of view)
 
-                pipette_setpoint = np.array([0, 0, self.microscope.position() + self.config.cell_distance])
+                #convert cell_distance to stage units
+                cell_distance = self.calibrated_unit.um_to_pixels_relative(np.array([0, 0, -self.config.cell_distance]))
+                cell_distance = cell_distance[2]
+                print('cell_distance: config', self.config.cell_distance)
+                print('cell_distance: stage', cell_distance)
+
+
+
+                pipette_setpoint = np.array([0, 0, self.microscope.position() + cell_distance])
                 self.calibrated_unit.safe_move(pipette_setpoint)
                 self.calibrated_unit.wait_until_still()
                 
-
-                return
 
                 # Check resistance again
                 Rnow = self.amplifier.resistance()
@@ -169,8 +176,8 @@ class AutoPatcher(TaskController):
 
             self.info("Seal successful, R = " + str(self.amplifier.resistance()/1e6))
 
-            # Go whole-cell
-            self.break_in()
+            # # Go whole-cell
+            # self.break_in()
 
         finally:
             self.amplifier.stop_patch()
