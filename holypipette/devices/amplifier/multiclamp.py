@@ -22,6 +22,7 @@ import functools
 import logging
 import os
 import traceback
+import time
 
 from holypipette.devices.amplifier.amplifier import Amplifier
 
@@ -171,7 +172,7 @@ class MultiClampChannel(Amplifier):
         device number (700A) or using their serial number (700B).
     """
     # The path where ``AxMultiClampMsg.dll`` is located
-    dll_path = r'C:\Program Files\Molecular Devices\MultiClamp 700B Commander\3rd Party Support\AxMultiClampMsg'
+    dll_path = r'C:\\Program Files\\Molecular Devices\\MultiClamp 700B Commander\\3rd Party Support\AxMultiClampMsg'
     # A list of all present devices
     all_devices = None
     # The currently selected device
@@ -419,6 +420,9 @@ class MultiClampChannel(Amplifier):
         Returns resistance
         '''
         # Get resistance (assuming resistance metering is on)
+        if not self.resistance_meter_state():
+            self.switch_resistance_meter(True)
+            time.sleep(1.5) #resistance meter takes time to stabilize
         return self.get_meter_value()
 
     def stop_patch(self):
@@ -652,7 +656,7 @@ class MultiClampChannel(Amplifier):
         value = ctypes.c_double(0.)
         if not self.dll.MCCMSG_GetMeterValue(self.msg_handler,
                                              ctypes.byref(value),
-                                             ctypes.c_uint(0),
+                                             ctypes.c_uint(2), # "uMeterID" --> channel id?
                                              ctypes.byref(self.last_error)):
             self.check_error()
         return value.value
