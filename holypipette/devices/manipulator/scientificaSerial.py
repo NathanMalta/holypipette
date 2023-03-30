@@ -25,8 +25,13 @@ class SerialCommands():
 
 class ScientificaSerial(Manipulator):
 
-    def __init__(self, comPort: serial.Serial):
+    def __init__(self, comPort: serial.Serial, zAxisComPort):
         self.comPort : serial.Serial = comPort
+
+        self.zAxisComPort : serial.Serial = zAxisComPort
+        self.stageUnitsPerEncoderPulse = 1.45
+        self.encoderZ = 0
+
         self._lock = threading.Lock()
         self.current_pos = [0, 0, 0]
 
@@ -71,7 +76,7 @@ class ScientificaSerial(Manipulator):
         if axis == 2:
             return self.current_pos[1]
         if axis == 3:
-            return self.current_pos[2]
+            return self.encoderZ
         if axis == None:
             return self.current_pos
         
@@ -80,6 +85,12 @@ class ScientificaSerial(Manipulator):
         '''
         while True:
             startTime = time.time()
+            self.zAxisComPort.read_all()
+            self.zAxisComPort.read_until(b'\r\n')
+            encoderZ = self.zAxisComPort.read_until(b'\r\n').strip()
+            encoderZ = int(encoderZ)
+            self.encoderZ = encoderZ * self.stageUnitsPerEncoderPulse
+
             xyz = self._sendCmd(SerialCommands.GET_X_Y_Z)
             xyz = xyz.split('\t')
             
@@ -103,7 +114,17 @@ class ScientificaSerial(Manipulator):
             xPos = self.position(axis=1)
             self._sendCmd(SerialCommands.SET_X_Y_POS_ABS.format(int(xPos * 10), int(pos * 10)))
         if axis == 3:
-            self._sendCmd(SerialCommands.SET_Z_POS.format(int(pos * 10)))
+            stageZ = self.current_pos[2]
+            setpointStage = stageZ + (pos - self.encoderZ)
+            self._sendCmd(SerialCommands.SET_Z_POS.format(int(setpointStage * 10)))
+            self.wait_until_still()
+            time.sleep(1)
+            print(f'expected encoder: {pos} actual {self.encoderZ}')
+            error = pos - self.encoderZ
+            print(f'error: {error}')
+            if abs(error) > 2:
+                print('retrying')
+                self.absolute_move(pos, axis)
     
     def absolute_move_group(self, x, axes):
         x = list(x)
@@ -122,8 +143,8 @@ class ScientificaSerial(Manipulator):
         if axis == 2:
             self._sendCmd(SerialCommands.SET_X_Y_POS_REL.format(0, pos))
         if axis == 3:
-            currZ = self.position(3)
-            self._sendCmd(SerialCommands.SET_Z_POS.format(int((currZ + pos) * 10)))
+            absZCmd = self.position(3) + pos
+            self.absolute_move(absZCmd, 3)
 
     def relative_move_group(self, x, axes):
         cmd = [0, 0, 0]
@@ -134,8 +155,7 @@ class ScientificaSerial(Manipulator):
             self._sendCmd(SerialCommands.SET_X_Y_POS_REL.format(int(cmd[0] * 10), int(cmd[1] * 10)))
 
         if cmd[2] != 0:
-            currZ = self.position(3)
-            self._sendCmd(SerialCommands.SET_Z_POS.format(int((currZ + cmd[2]) * 10)))
+            self.relative_move(cmd[2], 3)
 
     def wait_until_still(self, axes = None, axis = None):
         while True:
