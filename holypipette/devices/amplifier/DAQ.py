@@ -14,11 +14,13 @@ class DAQ:
         self.readChannel = readChannel
         self.cmdChannel = cmdChannel
 
+        print(f'Using {self.readDev}/{self.readChannel} for reading and {self.cmdDev}/{self.cmdChannel} for writing.')
+
     def _readAnalogInput(self):
         with nidaqmx.Task() as task:
             task.ai_channels.add_ai_voltage_chan(f'{self.readDev}/{self.readChannel}', max_val=10, min_val=0)
-            task.timing.cfg_samp_clk_timing(1000, sample_mode=nidaqmx.constants.AcquisitionType.FINITE, samps_per_chan=1000)
-            task.triggers.reference_trigger.cfg_anlg_edge_ref_trig(f'{self.readDev}/{self.readChannel}', pretrigger_samples = 10, trigger_slope=nidaqmx.constants.Slope.RISING, trigger_level = 2 )
+            task.timing.cfg_samp_clk_timing(10000, sample_mode=nidaqmx.constants.AcquisitionType.FINITE, samps_per_chan=1000)
+            task.triggers.reference_trigger.cfg_anlg_edge_ref_trig(f'{self.readDev}/{self.readChannel}', pretrigger_samples = 10, trigger_slope=nidaqmx.constants.Slope.RISING, trigger_level = 0.1 )
             data = task.read(number_of_samples_per_channel=1000)
             
         return data
@@ -47,16 +49,19 @@ class DAQ:
             data[i * period : i * period + onTime] = amplitude
 
         task.write(data)
-        task.start()
         
         return task
     
     def getDataFromSquareWave(self, wave_freq, samplesPerSec, dutyCycle, amplitude):
-        self._sendSquareWave(wave_freq, samplesPerSec, dutyCycle, amplitude)
+        sendTask = self._sendSquareWave(wave_freq, samplesPerSec, dutyCycle, amplitude)
+        sendTask.start()
         data = self._readAnalogInput()
+        sendTask.stop()
+        sendTask.close()
 
-        return data
-    
+        xdata = np.linspace(0, 1, samplesPerSec)
+
+        return np.array([xdata, data])
 
 class FakeDAQ:
     def __init__(self):
@@ -84,5 +89,4 @@ class FakeDAQ:
         xdata = np.linspace(0, 1, samplesPerSec)
 
         data = np.array([xdata, ydata])
-
         return data
