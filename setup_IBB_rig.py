@@ -10,8 +10,9 @@ from holypipette.devices.manipulator import *
 from holypipette.devices.cellsorter import CellSorterController, CellSorterManip
 import serial
 
-stageSerial = serial.Serial(port='COM6', baudrate=9600, timeout=10000)
-stageController = ScientificaSerial(stageSerial)
+stageSerial = serial.Serial(port='COM6', baudrate=9600, timeout=1)
+zAxisEncoderComms = serial.Serial(port='COM19', baudrate=115200, timeout=1)
+stageController = ScientificaSerial(stageSerial, zAxisEncoderComms)
 
 sensapexController = SensapexManip()
 stage = ManipulatorUnit(stageController, [1, 2])
@@ -22,7 +23,7 @@ microscope.up_direction = 1.0
 
 unit = ManipulatorUnit(sensapexController, [1, 2, 3])
 
-amplifier = FakeAmplifier() #MultiClampChannel(channel=1)
+amplifier = MultiClampChannel(channel=1)
 
 pressureSerial = serial.Serial(port='COM15', baudrate=9600, timeout=0)
 pressure = IBBPressureController(channel=1, arduinoSerial=pressureSerial)
