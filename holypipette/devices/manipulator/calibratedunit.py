@@ -297,7 +297,7 @@ class CalibratedUnit(ManipulatorUnit):
     def record_cal_point(self):
         self.pipetteCalHelper.record_cal_point()
 
-    def finish_calibration(self): #TODO: Z-Axis calibration?
+    def finish_calibration(self):
         '''
         Automatic calibration of the pipette manipulator.
         '''
@@ -320,7 +320,6 @@ class CalibratedUnit(ManipulatorUnit):
         self.r0 = mat[0:3, 3] #um -> pixels offset
         self.r0_inv = mat_inv[0:3, 3] #pixels -> um offset
 
-        #for M and Minv, we only want the upper 2x2 matrix (b/c assumption that z axis is equivilant), the rest of the matrix is just the identity
         #just 3x3 portion of M for self.M
         self.M = mat[0:3, 0:3]
 
@@ -340,6 +339,47 @@ class CalibratedUnit(ManipulatorUnit):
         print('r0_inv: ', self.r0_inv)
 
         self.calibrated = True
+    
+
+    def recalibrate_pipette(self):
+        '''recalibrate pipette offset while keeping matrix
+        '''
+        print('recalculating piptte offsets...')
+        emperical_poses = []
+        for i in range(10):
+            _, _, _, frame = self.camera.raw_frame_queue[0]
+            pos = self.pipetteCalHelper.pipetteFinder.find_pipette(frame)
+            if pos != None:
+                emperical_poses.append([pos[0], pos[1]])
+        
+        if len(emperical_poses) == 0:
+            print('No pipette found in image, can\'t run correction')
+            return
+        
+        new_offset = np.zeros(3)
+        pos_pixels_emperical = np.median(emperical_poses, axis=0)
+        pos_pixels_emperical = np.append(pos_pixels_emperical, self.microscope.position())
+        new_offset = pos_pixels_emperical - self.um_to_pixels_relative(self.dev.position()) - self.stage.reference_position()
+        print('Old offsets: ', self.r0, self.r0_inv)
+
+        self.r0 = np.array(new_offset)
+
+        #create r0_inv
+        #first create homogenous matrix
+
+        homogenous_mat = np.zeros((4,4))
+        homogenous_mat[0:3, 0:3] = self.M
+        homogenous_mat[0:3, 3] = self.r0
+        homogenous_mat[3, 3] = 1
+
+        #invert
+        homogenous_mat_inv = pinv(homogenous_mat)
+
+        #get r0_inv
+        self.r0_inv = homogenous_mat_inv[0:3, 3]
+
+        print('New offsets: ', self.r0, self.r0_inv)
+
 
     def save_configuration(self):
         '''
@@ -347,13 +387,7 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         config = {'up_direction' : self.up_direction,
                   'M' : self.M,
-                  'r0' : self.r0,
-                  'pipette_position' : self.pipette_position,
-                  'photos' : self.photos,
-                  'photo_x0' : self.photo_x0,
-                  'photo_y0' : self.photo_y0,
-                  'min' : self.min,
-                  'max' : self.max}
+                  'r0' : self.r0}
 
         return config
 
@@ -362,18 +396,10 @@ class CalibratedUnit(ManipulatorUnit):
         Loads configuration from dictionary config.
         Variables not present in the dictionary are untouched.
         '''
-        self.up_direction = config.get('up_direction', self.up_direction)
         self.M = config.get('M', self.M)
-        if 'M' in config:
-            self.Minv = pinv(self.M)
-            self.calibrated = True
+        self.Minv = pinv(self.M)
+        self.calibrated = True
         self.r0 = config.get('r0', self.r0)
-        self.pipette_position = config.get('pipette_position', self.pipette_position)
-        self.photos = config.get('photos', self.photos)
-        self.photo_x0 = config.get('photo_x0', self.photo_x0)
-        self.photo_y0 = config.get('photo_y0', self.photo_y0)
-        #self.min = config.get('min', self.min)
-        #self.max = config.get('max', self.max)
 
 class CalibratedStage(CalibratedUnit):
     '''
@@ -474,6 +500,8 @@ class CalibratedStage(CalibratedUnit):
 
         self.info('Stage calibration done')
         # self.analyze_calibration()
+
+
 
     def mosaic(self, width = None, height = None):
         '''
