@@ -2,6 +2,7 @@
 "Fake setup" for GUI development on a computer without access to a rig
 '''
 from holypipette.devices.amplifier.amplifier import FakeAmplifier
+from holypipette.devices.amplifier.DAQ import FakeDAQ
 from holypipette.devices.camera.pcocamera import PcoCamera
 from holypipette.devices.pressurecontroller import FakePressureController
 from holypipette.devices.camera.camera import FakeCamera
@@ -23,6 +24,7 @@ microscope.up_direction = 1.0
 
 unit = ManipulatorUnit(pipetteManip, [1, 2, 3])
 
+daq = FakeDAQ()
 amplifier = FakeAmplifier()
 pressure = FakePressureController()
 
