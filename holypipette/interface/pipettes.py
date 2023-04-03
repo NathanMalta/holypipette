@@ -15,7 +15,7 @@ class PipetteInterface(TaskInterface):
     '''
 
     def __init__(self, stage, microscope, camera, unit,
-                 config_filename=None):
+                 config_filename='calibration.pickle'):
         super(PipetteInterface, self).__init__()
         self.microscope = microscope
         self.camera = camera
@@ -29,15 +29,23 @@ class PipetteInterface(TaskInterface):
                                                 camera,
                                                 config=self.calibration_config)
 
-        # This should be refactored (in TaskInterface?)
-        config_folder = os.path.join(os.path.expanduser('~'),'holypipette')
-        if not os.path.exists(config_folder):
-            os.mkdir(config_folder)
-        if config_filename is None:
-            config_filename = 'config_manipulator.cfg'
-        config_filename = os.path.join(config_folder,config_filename)
+        if config_filename is not None:
+            #read calibration from file
+            if os.path.isfile(config_filename):
+                with open(config_filename, 'rb') as f:
+                    cal = pickle.load(f)
+                    self.calibrated_unit.load_configuration(cal['manip'])
+                    self.calibrated_stage.load_configuration(cal['stage'])
 
-        self.config_filename = config_filename
+                    print('Loaded calibration from file!')
+                    print('Manipulator calibration:')
+                    print(cal['manip'])
+                    print('Stage calibration:')
+                    print(cal['stage'])
+            else:
+                print('No calibration file found, need to calibrate before usage!')
+
+
         self.cleaning_bath_position = None
         self.contact_position = None
         self.rinsing_bath_position = None
@@ -66,6 +74,23 @@ class PipetteInterface(TaskInterface):
     def move_pipette_x(self, distance):
         self.calibrated_unit.relative_move(distance, axis=0)
 
+    @command(category='Manipulators',
+                description='Write current calibration to file')
+    def write_calibration(self):
+        if not self.calibrated_stage.calibrated:
+            raise RuntimeError('Stage not calibrated')
+        if not self.calibrated_unit.calibrated:
+            raise RuntimeError('Manipulator not calibrated')
+        
+        with open('calibration.pickle', 'wb') as f:
+            pickle.dump({'manip': self.calibrated_unit.save_configuration(),
+                         'stage': self.calibrated_stage.save_configuration()}, f)
+            
+    @command(category='Manipulators',
+                description='recalibrate manipulator offset while preserving matrix')
+    def recalibrate_manipulator(self):
+        self.calibrated_unit.recalibrate_pipette()
+            
     @command(category='Manipulators',
              description='Move pipette in y direction by {:.0f}μm',
              default_arg=10)
