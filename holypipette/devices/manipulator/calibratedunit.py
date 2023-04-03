@@ -165,6 +165,12 @@ class CalibratedUnit(ManipulatorUnit):
         Converts um to pixel coordinates.
         '''
         return dot(self.M, pos_microns) + self.r0 - self.emperical_offset
+    
+    def um_to_pixels_relative(self, pos_microns):
+        '''
+        Converts um to pixel coordinates.
+        '''
+        return dot(self.M, pos_microns)
 
     def reference_position(self, include_offset = True):
         '''
