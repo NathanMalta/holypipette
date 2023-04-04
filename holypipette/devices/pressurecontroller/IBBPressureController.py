@@ -123,6 +123,10 @@ class IBBPressureController(PressureController):
     def get_pressure(self):
         return self.get_setpoint() #maybe add a pressure sensor down the line?
     
+    
+    def measure(self):
+        return self.get_pressure()
+    
 
     def pulse(self, delayMs):
         '''Tell the onboard arduino to pulse pressure for a certain period of time
