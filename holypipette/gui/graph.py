@@ -5,6 +5,9 @@ from PyQt5 import QtCore
 
 from pyqtgraph import PlotWidget, plot
 
+import threading
+import time
+
 import numpy as np
 from collections import deque
 from holypipette.devices.amplifier import DAQ
@@ -61,17 +64,27 @@ class EPhysGraph(QWidget):
         self.updateTimer.timeout.connect(self.update_plot)
         self.updateTimer.start(self.updateDt)
 
+        #start async daq data update
+        self.lastestDaqData = None
+        self.daqUpdateThread = threading.Thread(target=self.updateDAQDataAsync, daemon=True)
+        self.daqUpdateThread.start()
+
         #show window and bring to front
         self.raise_()
         self.show()
 
+    def updateDAQDataAsync(self):
+        while True:
+            self.lastestDaqData = self.daq.getDataFromSquareWave(10, 2000, 0.5, 0.1, 0.1)
+            time.sleep(0.1)
 
     def update_plot(self):
         #update data
-        # squareWaveData = self.daq.getDataFromSquareWave(10, 2000, 0.5, 0.1, 0.1)
-        # self.squareWavePlot.plot(squareWaveData[0], squareWaveData[1])
-
-
+        if self.lastestDaqData is not None:
+            self.squareWavePlot.clear()
+            self.squareWavePlot.plot(self.lastestDaqData[0], self.lastestDaqData[1])
+            self.lastestDaqData = None
+        
         self.pressureData.append(self.pressureController.measure())
         pressureX = [i * self.updateDt / 1000 for i in range(len(self.pressureData))]
         self.pressurePlot.clear()
