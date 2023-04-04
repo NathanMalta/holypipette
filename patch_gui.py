@@ -18,7 +18,7 @@ app = QtWidgets.QApplication(sys.argv)
 pipette_controller = PipetteInterface(stage, microscope, camera, unit)
 patch_controller = AutoPatchInterface(amplifier, pressure, pipette_controller)
 gui = PatchGui(camera, pipette_controller, patch_controller)
-graphs = EPhysGraph(daq)
+graphs = EPhysGraph(daq, pressure)
 graphs.show()
 
 gui.initialize()
