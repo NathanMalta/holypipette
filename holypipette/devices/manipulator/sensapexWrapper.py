@@ -22,7 +22,7 @@ class SensapexManip(Manipulator):
         else:
             self.deviceID = deviceID
 
-        self.max_speed = 1000 # "feels good" default value
+        self.max_speed = 5000 # "feels good" default value
         self.max_acceleration = 20 # "feels good" default value
         self.armAngle = math.radians(-self._get_axis_angle())
 

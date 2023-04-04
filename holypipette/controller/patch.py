@@ -187,17 +187,20 @@ class AutoPatcher(TaskController):
     def clean_pipette(self):
         if self.cleaning_bath_position is None:
             raise ValueError('Cleaning bath position has not been set')
-        if self.rinsing_bath_position is None:
-            raise ValueError('Rinsing bath position has not been set')
+        # if self.rinsing_bath_position is None:
+        #     raise ValueError('Rinsing bath position has not been set')
         try:
             start_position = self.calibrated_unit.position()
             # Move the pipette to the washing bath.
-            self.calibrated_unit.absolute_move(self.cleaning_bath_position[0], 0)
-            self.calibrated_unit.wait_until_still(0)
-            self.calibrated_unit.absolute_move(self.cleaning_bath_position[2] - 5000, 2)
+            self.calibrated_unit.absolute_move(0, 2)
+            print('moving up to 0...')
             self.calibrated_unit.wait_until_still(2)
+            self.calibrated_unit.absolute_move(self.cleaning_bath_position[0], 0)
+            print('moving to cleaning bath x, y...')
+            self.calibrated_unit.wait_until_still(0)
             self.calibrated_unit.absolute_move(self.cleaning_bath_position[1], 1)
             self.calibrated_unit.wait_until_still(1)
+            print('moving to cleaning bath z...')
             self.calibrated_unit.absolute_move(self.cleaning_bath_position[2], 2)
             self.calibrated_unit.wait_until_still(2)
             # Fill up with the Alconox
@@ -210,29 +213,30 @@ class AutoPatcher(TaskController):
                 self.pressure.set_pressure(1000)
                 self.sleep(0.375)
 
-            # Step 2: Rinsing.
-            # Move the pipette to the rinsing bath.
-            self.calibrated_unit.absolute_move(self.rinsing_bath_position[2] - 5000, 2)
-            self.calibrated_unit.wait_until_still(2)
-            self.calibrated_unit.absolute_move(self.rinsing_bath_position[1], 1)
-            self.calibrated_unit.wait_until_still(1)
-            self.calibrated_unit.absolute_move(self.rinsing_bath_position[0], 0)
-            self.calibrated_unit.wait_until_still(0)
-            self.calibrated_unit.absolute_move(self.rinsing_bath_position[2], 2)
-            self.calibrated_unit.wait_until_still(2)
-            # Expel the remaining Alconox
-            self.pressure.set_pressure(1000)
-            self.sleep(6)
+            # # Step 2: Rinsing.
+            # # Move the pipette to the rinsing bath.
+            # self.calibrated_unit.absolute_move(self.rinsing_bath_position[2] - 5000, 2)
+            # self.calibrated_unit.wait_until_still(2)
+            # self.calibrated_unit.absolute_move(self.rinsing_bath_position[1], 1)
+            # self.calibrated_unit.wait_until_still(1)
+            # self.calibrated_unit.absolute_move(self.rinsing_bath_position[0], 0)
+            # self.calibrated_unit.wait_until_still(0)
+            # self.calibrated_unit.absolute_move(self.rinsing_bath_position[2], 2)
+            # self.calibrated_unit.wait_until_still(2)
+            # # Expel the remaining Alconox
+            # self.pressure.set_pressure(1000)
+            # self.sleep(6)
 
             # Step 3: Move back.
-            self.calibrated_unit.absolute_move(0, 0)
-            self.calibrated_unit.wait_until_still(0)
+            self.calibrated_unit.absolute_move(0, 2)
+            self.calibrated_unit.wait_until_still(2)
             self.calibrated_unit.absolute_move(start_position[1], 1)
             self.calibrated_unit.wait_until_still(1)
-            self.calibrated_unit.absolute_move(start_position[2], 2)
-            self.calibrated_unit.wait_until_still(2)
             self.calibrated_unit.absolute_move(start_position[0], 0)
             self.calibrated_unit.wait_until_still(0)
+            self.calibrated_unit.absolute_move(start_position[2], 2)
+            self.calibrated_unit.wait_until_still(2)
+
         finally:
             self.pressure.set_pressure(self.config.pressure_near)
 
