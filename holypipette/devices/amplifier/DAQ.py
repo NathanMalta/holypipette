@@ -14,15 +14,25 @@ class DAQ:
 
         self.readChannel = readChannel
         self.cmdChannel = cmdChannel
+        self.numSamples = 2000
 
         print(f'Using {self.readDev}/{self.readChannel} for reading and {self.cmdDev}/{self.cmdChannel} for writing.')
 
     def _readAnalogInput(self):
         with nidaqmx.Task() as task:
             task.ai_channels.add_ai_voltage_chan(f'{self.readDev}/{self.readChannel}', max_val=10, min_val=0)
-            task.timing.cfg_samp_clk_timing(10000, sample_mode=nidaqmx.constants.AcquisitionType.FINITE, samps_per_chan=1000)
+            task.timing.cfg_samp_clk_timing(20000, sample_mode=nidaqmx.constants.AcquisitionType.FINITE, samps_per_chan=self.numSamples)
             task.triggers.reference_trigger.cfg_anlg_edge_ref_trig(f'{self.readDev}/{self.readChannel}', pretrigger_samples = 10, trigger_slope=nidaqmx.constants.Slope.RISING, trigger_level = 0.1 )
-            data = task.read(number_of_samples_per_channel=1000)
+            data = task.read(number_of_samples_per_channel=2000)
+            data = np.array(data, dtype=float)
+            task.stop()
+
+            #turn all infinite and nan values to 0
+            data = np.nan_to_num(data, nan=0, posinf=0, neginf=0)
+
+        #check for None values
+        if data is None or np.where(data == None)[0].size > 0:
+            data = np.zeros(self.numSamples)
             
         return data
         
@@ -32,7 +42,7 @@ class DAQ:
         task.timing.cfg_samp_clk_timing(samplesPerSec, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS)
         
         #create a wave_freq Hz square wave
-        data = np.zeros(samplesPerSec / recordingTime)
+        data = np.zeros(int(samplesPerSec / recordingTime))
         onTime = 1 / wave_freq * dutyCycle * samplesPerSec
         offTime = 1 / wave_freq * (1-dutyCycle) * samplesPerSec
 
@@ -60,7 +70,7 @@ class DAQ:
         sendTask.stop()
         sendTask.close()
 
-        xdata = np.linspace(0, recordingTime, samplesPerSec)
+        xdata = np.linspace(0, samplesPerSec * recordingTime, self.numSamples, dtype=float)
 
         return np.array([xdata, data])
 

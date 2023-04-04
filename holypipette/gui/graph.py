@@ -6,7 +6,7 @@ from PyQt5 import QtCore
 from pyqtgraph import PlotWidget, plot
 
 import numpy as np
-
+from collections import deque
 from holypipette.devices.amplifier import DAQ
 from holypipette.devices.pressurecontroller import PressureController
 
@@ -35,13 +35,19 @@ class EPhysGraph(QWidget):
         self.squareWavePlot.setBackground('w')
         self.pressurePlot.setBackground('w')
 
+        #set axis colors to black
+        self.squareWavePlot.getAxis('left').setPen('k')
+        self.squareWavePlot.getAxis('bottom').setPen('k')
+        self.pressurePlot.getAxis('left').setPen('k')
+        self.pressurePlot.getAxis('bottom').setPen('k')
+
         #set labels
         self.squareWavePlot.setLabel('left', "Voltage", units='V')
         self.squareWavePlot.setLabel('bottom', "Time", units='s')
         self.pressurePlot.setLabel('left', "Pressure", units='mbar')
         self.pressurePlot.setLabel('bottom', "Time", units='s')
 
-        self.pressureData = []
+        self.pressureData = deque(maxlen=100)
 
         #create a quarter layout for 4 graphs
         layout = QVBoxLayout()
@@ -51,8 +57,9 @@ class EPhysGraph(QWidget):
         self.setLayout(layout)
         
         self.updateTimer = QtCore.QTimer()
+        self.updateDt = 100 #ms
         self.updateTimer.timeout.connect(self.update_plot)
-        self.updateTimer.start(100)
+        self.updateTimer.start(self.updateDt)
 
         #show window and bring to front
         self.raise_()
@@ -61,10 +68,11 @@ class EPhysGraph(QWidget):
 
     def update_plot(self):
         #update data
-        squareWaveData = self.daq.getDataFromSquareWave(10, 2000, 0.5, 0.1, 0.1)
-        self.squareWavePlot.plot(squareWaveData[0], squareWaveData[1])
+        # squareWaveData = self.daq.getDataFromSquareWave(10, 2000, 0.5, 0.1, 0.1)
+        # self.squareWavePlot.plot(squareWaveData[0], squareWaveData[1])
 
 
         self.pressureData.append(self.pressureController.measure())
-        pressureX = [i for i in range(len(self.pressureData))]
-        self.pressurePlot.plot(pressureX, self.pressureData)
+        pressureX = [i * self.updateDt / 1000 for i in range(len(self.pressureData))]
+        self.pressurePlot.clear()
+        self.pressurePlot.plot(pressureX, self.pressureData, pen='k')

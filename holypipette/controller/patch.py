@@ -234,11 +234,12 @@ class AutoPatcher(TaskController):
             self.calibrated_unit.wait_until_still(1)
             self.calibrated_unit.absolute_move(start_position[0], 0)
             self.calibrated_unit.wait_until_still(0)
+            self.pressure.set_pressure(self.config.pressure_near)
             self.calibrated_unit.absolute_move(start_position[2], 2)
             self.calibrated_unit.wait_until_still(2)
-
+            
         finally:
-            self.pressure.set_pressure(self.config.pressure_near)
+            pass
 
     def sequential_patching(self):
         from holypipette.gui import movingList
