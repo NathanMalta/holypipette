@@ -1,9 +1,14 @@
+import logging
+
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt5 import QtCore
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
+
+from pyqtgraph import PlotWidget, plot
+
+import numpy as np
 
 from holypipette.devices.amplifier import DAQ
+from holypipette.devices.pressurecontroller import PressureController
 
 __all__ = ["EPhysGraph"]
 
@@ -11,37 +16,55 @@ class EPhysGraph(QWidget):
     """A window that plots electrophysiology data from the DAQ
     """
     
-    def __init__(self, daq : DAQ):
+    def __init__(self, daq : DAQ, pressureController : PressureController, parent=None):
         super().__init__()
 
+        #stop matplotlib font warnings
+        logging.getLogger('matplotlib.font_manager').disabled = True
+
         self.daq = daq
+        self.pressureController = pressureController
 
         #setup window
-        layout = QVBoxLayout()
         self.setWindowTitle("Electrophysiology")
 
-        #add matplotlib graph
-        self.figure = Figure()
-        self.axes = self.figure.add_subplot(111)
-        self.canvas = FigureCanvasQTAgg(self.figure)
-        layout.addWidget(self.canvas)
-        self.setLayout(layout)
+        self.squareWavePlot = PlotWidget()
+        self.pressurePlot = PlotWidget()
 
-        #update plot every 500ms
-        timer = QtCore.QTimer(self)
-        timer.timeout.connect(self.update_plot)
-        timer.start(500)
+        #set background color of plots
+        self.squareWavePlot.setBackground('w')
+        self.pressurePlot.setBackground('w')
+
+        #set labels
+        self.squareWavePlot.setLabel('left', "Voltage", units='V')
+        self.squareWavePlot.setLabel('bottom', "Time", units='s')
+        self.pressurePlot.setLabel('left', "Pressure", units='mbar')
+        self.pressurePlot.setLabel('bottom', "Time", units='s')
+
+        self.pressureData = []
+
+        #create a quarter layout for 4 graphs
+        layout = QVBoxLayout()
+        layout.addWidget(self.squareWavePlot)
+        layout.addWidget(self.pressurePlot)
+
+        self.setLayout(layout)
+        
+        self.updateTimer = QtCore.QTimer()
+        self.updateTimer.timeout.connect(self.update_plot)
+        self.updateTimer.start(100)
 
         #show window and bring to front
-        self.show()
         self.raise_()
+        self.show()
+
 
     def update_plot(self):
         #update data
-        data = self.daq.getDataFromSquareWave(10, 1000, 0.5, 0.5)
-        self.plot(data[0], data[1])
+        squareWaveData = self.daq.getDataFromSquareWave(10, 2000, 0.5, 0.1, 0.1)
+        self.squareWavePlot.plot(squareWaveData[0], squareWaveData[1])
 
-    def plot(self, x, y):
-        self.axes.clear()
-        self.axes.plot(x, y)
-        self.canvas.draw()
+
+        self.pressureData.append(self.pressureController.measure())
+        pressureX = [i for i in range(len(self.pressureData))]
+        self.pressurePlot.plot(pressureX, self.pressureData)
