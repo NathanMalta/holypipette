@@ -28,6 +28,10 @@ class EPhysGraph(QWidget):
         self.daq = daq
         self.pressureController = pressureController
 
+        #constants for Multi Clamp
+        self.externalCommandSensitivity = 20 #mv/V
+        self.triggerLevel = 0.1 #V
+
         #setup window
         self.setWindowTitle("Electrophysiology")
 
@@ -75,7 +79,39 @@ class EPhysGraph(QWidget):
 
     def updateDAQDataAsync(self):
         while True:
-            self.lastestDaqData = self.daq.getDataFromSquareWave(10, 2000, 0.5, 0.1, 0.1)
+            raw_data = self.daq.getDataFromSquareWave(10, 5000, 0.5, 0.1, 0.5)
+            mean = np.mean(raw_data[1, :])
+            #split array into greater than and less than mean
+            low_values = raw_data[:, raw_data[1, :] < mean]
+            high_values = raw_data[:, raw_data[1, :] > mean]
+
+            low_mean = np.mean(low_values[1, :])
+            high_mean = np.mean(high_values[1, :])
+
+            # set low to mean 0
+            raw_data[1, :] -= low_mean
+            triggerSpots = np.where(raw_data[1, :] > self.triggerLevel)[0]
+            lowSpots = np.where(raw_data[1, :] < 0)[0]
+
+            #find first rising edge (first low to high transition)
+            if len(lowSpots) == 0 or len(triggerSpots) == 0:
+                print("no rising edge found")
+                self.lastestDaqData = raw_data
+                continue
+
+            try:
+                # get rising edge location (first trigger spot after first low spot)
+                rising_edge = triggerSpots[triggerSpots > lowSpots[0]][0]
+                falling_edge = lowSpots[lowSpots > rising_edge][0]
+                second_rising_edge = triggerSpots[triggerSpots > falling_edge][0]
+
+                # trim data to rising edge
+                squarewave = raw_data[:, rising_edge:second_rising_edge]
+
+                self.lastestDaqData = squarewave
+            except:
+                print("no rising edge found")
+                self.lastestDaqData = raw_data
             time.sleep(0.1)
 
     def update_plot(self):
