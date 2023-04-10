@@ -83,7 +83,8 @@ class FakeDAQ:
         pass
 
     def getDataFromSquareWave(self, wave_freq, samplesPerSec, dutyCycle, amplitude, recordingTime):
-        ydata = np.zeros(samplesPerSec)
+        #create a wave_freq Hz square wave
+        data = np.zeros(int(samplesPerSec / recordingTime))
         onTime = 1 / wave_freq * dutyCycle * samplesPerSec
         offTime = 1 / wave_freq * (1-dutyCycle) * samplesPerSec
 
@@ -96,13 +97,12 @@ class FakeDAQ:
         period = int(period)
 
         wavesPerSec = samplesPerSec // period
-        numWaves = math.ceil(recordingTime * wavesPerSec)
 
-        #make up some fake data
-        for i in range(numWaves):
-            ydata[i * period : i * period + onTime] = amplitude / 10
+        for i in range(wavesPerSec):
+            data[i * period : i * period + onTime] = amplitude
 
-        xdata = np.linspace(0, recordingTime, samplesPerSec)
 
-        data = np.array([xdata, ydata])
+        xdata = np.linspace(0, recordingTime, len(data), dtype=float)
+
+        data = np.array([xdata, data])
         return data
