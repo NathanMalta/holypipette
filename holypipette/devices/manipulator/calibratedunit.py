@@ -493,13 +493,10 @@ class CalibratedStage(CalibratedUnit):
 
         #for M and Minv, we only want the upper 2x2 matrix (b/c assumption that z axis is equivilant), the rest of the matrix is just the identity
         self.M = mat[0:2, 0:2]
-
         self.Minv = mat_inv[0:2, 0:2]
-        
         self.calibrated = True
 
         self.info('Stage calibration done')
-        # self.analyze_calibration()
 
 
 
@@ -537,14 +534,14 @@ class CalibratedStage(CalibratedUnit):
 
         try:
             for row in range(ny):
-                img = self.camera.snap()
+                img, _ = self.camera.snap()
                 big_image[row*dy:(row+1)*dy, column*dx:(column+1)*dx] = img
                 for _ in range(1,nx):
                     column+=xdirection
                     self.reference_relative_move([-dx*xdirection,0,0]) # sign: it's a compensatory move
                     self.wait_until_still()
                     self.sleep(0.1)
-                    img = self.camera.snap()
+                    img, _ = self.camera.snap()
                     big_image[row * dy:(row + 1) * dy, column * dx:(column + 1) * dx] = img
                 if row<ny-1:
                     xdirection = -xdirection

@@ -5,6 +5,7 @@ from types import MethodType
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import Qt
 import pyqtgraph as pg
+import PyQt5.QtGui as QtGui
 import numpy as np
 
 
@@ -34,9 +35,15 @@ class PatchGui(ManipulatorGui):
         self.interface_signals[self.patch_interface] = (self.patch_command_signal,
                                                         self.patch_reset_signal)
         
+        #add patching button tab
         button_tab = PatchButtons(self.patch_interface, pipette_interface, self.start_task, self.interface_signals)
         self.add_config_gui(self.patch_interface.config)
         self.add_tab(button_tab, 'Commands', index = 0)
+
+        #add cell sorter button tab
+        cellsorter_tab = CellSorterButtons(self.patch_interface, pipette_interface, self.start_task, self.interface_signals)
+        self.add_tab(cellsorter_tab, 'Cell Sorter', index = 0)
+
         # Update the pressure and information in the status bar every 50ms
         self.pressure_timer = QtCore.QTimer()
         self.pressure_timer.timeout.connect(self.display_pressure)
@@ -79,43 +86,12 @@ class TrackingPatchGui(PatchGui):
         self.register_key_action(Qt.Key_F8, None,
                                  self.patch_interface.contact_detection)
 
-class PatchButtons(QtWidgets.QWidget):
+class ButtonTabWidget(QtWidgets.QWidget):
     def nothing(self):
         pass
 
-    def __init__(self, patch_interface : AutoPatchInterface, pipette_interface : PipetteInterface, start_task, interface_signals):
-        super(PatchButtons, self).__init__()
-        self.patch_interface = patch_interface
-        self.pipette_interface = pipette_interface
-
-        self.start_task = start_task
-        self.interface_signals = interface_signals
-
-        self.pos_update_timers = []
-        self.pos_labels = []
-
-        layout = QtWidgets.QVBoxLayout()
-        layout.setAlignment(Qt.AlignTop)
-
-        self.addPositionBox('stage position', layout, self.update_stage_pos_labels)
-        self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
-
-        #add a box for cal
-        buttonList = [['Calibrate Stage','Set Cell Plane'], ['Add Pipette Cal Point', 'Finish Pipette Cal'], ['Save Calibration', 'Recalibrate Pipette']]
-        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.set_floor], [self.pipette_interface.record_cal_point, self.pipette_interface.finish_calibration], [self.pipette_interface.write_calibration, self.pipette_interface.recalibrate_manipulator]]
-        self.addButtonList('calibration', layout, buttonList, cmds)
-
-        #add a box for movement
-        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Raise Pipette for Coverslip', 'Lower Pipette to Original'], ['Center Pipette']]
-        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.pipette_interface.raise_pipette, self.pipette_interface.lower_pipette], [self.pipette_interface.center_pipette]]
-        self.addButtonList('movement', layout, buttonList, cmds)
-
-        #add a box for patching cmds
-        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch', 'Continue'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
-        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch, self.do_nothing], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
-        self.addButtonList('patching', layout, buttonList, cmds)
-        
-        self.setLayout(layout)
+    def __init__(self):
+        super(ButtonTabWidget, self).__init__()
 
     def do_nothing(self):
         pass # a dummy function for buttons that aren't implemented yet
@@ -135,13 +111,13 @@ class PatchButtons(QtWidgets.QWidget):
             #we're dealing with a function
             cmd()
 
-    def addPositionBox(self, name: str, layout, update_func):
+    def addPositionBox(self, name: str, layout, update_func, axes=['x', 'y', 'z']):
         #add a box for manipulator and stage positions
         box = QtWidgets.QGroupBox(name)
         row = QtWidgets.QHBoxLayout()
         indicies = []
         #create a new row for each position
-        for j, axis in enumerate(['x', 'y', 'z']):
+        for j, axis in enumerate(axes):
             #create a label for the position
             label = QtWidgets.QLabel(f'{axis}: TODO')
             row.addWidget(label)
@@ -186,6 +162,41 @@ class PatchButtons(QtWidgets.QWidget):
         layout.addWidget(box)
 
     
+class PatchButtons(ButtonTabWidget):
+    def __init__(self, patch_interface : AutoPatchInterface, pipette_interface : PipetteInterface, start_task, interface_signals):
+        super(PatchButtons, self).__init__()
+        self.patch_interface = patch_interface
+        self.pipette_interface = pipette_interface
+
+        self.start_task = start_task
+        self.interface_signals = interface_signals
+
+        self.pos_update_timers = []
+        self.pos_labels = []
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.setAlignment(Qt.AlignTop)
+
+        self.addPositionBox('stage position', layout, self.update_stage_pos_labels)
+        self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
+
+        #add a box for cal
+        buttonList = [['Calibrate Stage','Set Cell Plane'], ['Add Pipette Cal Point', 'Finish Pipette Cal'], ['Save Calibration', 'Recalibrate Pipette']]
+        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.set_floor], [self.pipette_interface.record_cal_point, self.pipette_interface.finish_calibration], [self.pipette_interface.write_calibration, self.pipette_interface.recalibrate_manipulator]]
+        self.addButtonList('calibration', layout, buttonList, cmds)
+
+        #add a box for movement
+        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Calibrate Cell Sorter', 'Cell Sorter to Cell'], ['Center Pipette']]
+        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.pipette_interface.calibrate_cell_sorter, self.patch_interface.move_cellsorter_to_cell], [self.pipette_interface.center_pipette]]
+        self.addButtonList('movement', layout, buttonList, cmds)
+
+        #add a box for patching cmds
+        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch', 'Continue'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
+        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch, self.do_nothing], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
+        self.addButtonList('patching', layout, buttonList, cmds)
+        
+        self.setLayout(layout)
+
     def update_pipette_pos_labels(self, indicies):
         #update the position labels
         currPos = self.pipette_interface.calibrated_unit.unit.position()
@@ -203,3 +214,123 @@ class PatchButtons(QtWidgets.QWidget):
                 label.setText(f'{label.text().split(":")[0]}: {xyPos[i]:.2f}')
             else:
                 label.setText(f'{label.text().split(":")[0]}: {zPos:.2f}')
+
+
+class CellSorterButtons(ButtonTabWidget):
+    def __init__(self, patch_interface : AutoPatchInterface, pipette_interface : PipetteInterface, start_task, interface_signals):
+        super(CellSorterButtons, self).__init__()
+        self.patch_interface = patch_interface
+        self.pipette_interface = pipette_interface
+
+        self.start_task = start_task
+        self.interface_signals = interface_signals
+
+        self.pos_update_timers = []
+        self.pos_labels = []
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.setAlignment(Qt.AlignTop)
+
+        self.addPositionBox('Automated Movement', layout, self.update_cellsorter_pos_labels, axes=['Z'])
+
+        #add a box for movement
+        buttonList = [['Calibrate', 'Sorter to Cell']]
+        cmds = [[self.pipette_interface.calibrate_cell_sorter, self.patch_interface.move_cellsorter_to_cell]]
+        self.addButtonList('Cell Sorter Movement', layout, buttonList, cmds)
+        self.addCellSorterControlBox('Cell Sorter Control', layout)
+
+        self.setLayout(layout)
+
+    def update_cellsorter_pos_labels(self, indicies):
+        #update the position labels
+        currPos = self.pipette_interface.calibrated_cellsorter.position()
+        for _, ind in enumerate(indicies):
+            label = self.pos_labels[ind]
+            label.setText(f'{label.text().split(":")[0]}: {currPos:.2f}')
+
+    def addCellSorterControlBox(self, name, layout):
+
+        posLayout = QtWidgets.QGroupBox(name)
+        rows = QtWidgets.QVBoxLayout()
+
+        #add a label
+        movement_row = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel(name)
+        label.setText("Movement Control")
+        label.setAlignment(Qt.AlignCenter)
+
+        #add label to layout
+        movement_row.addWidget(label)
+        
+        #add position text input
+        posInput = QtWidgets.QLineEdit()
+        posInput.setPlaceholderText('Relative Movement (um) Position')
+        posInput.setValidator(QtGui.QDoubleValidator())
+        posInput.returnPressed.connect(lambda: self.pipette_interface.calibrated_cellsorter.relative_move(float(posInput.text())))
+        movement_row.addWidget(posInput)
+
+        #add movement to layout
+        rows.addLayout(movement_row)
+
+        #add suction control row (label, input, button)
+        suction_row = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel(name)
+        label.setText("Suction")
+        label.setAlignment(Qt.AlignCenter)
+
+        #add label to layout
+        suction_row.addWidget(label)
+
+        #add pressure text input
+        suctionInput = QtWidgets.QLineEdit()
+        suctionInput.setPlaceholderText('Duration (ms)')
+        suctionInput.setValidator(QtGui.QIntValidator())
+        suction_row.addWidget(suctionInput)
+
+        label = QtWidgets.QLabel(name)
+        label.setText("ms")
+        label.setAlignment(Qt.AlignCenter)
+        suction_row.addWidget(label)
+
+        #add button
+        suctionButton = QtWidgets.QPushButton('Go')
+        suctionButton.clicked.connect(lambda: self.pipette_interface.calibrated_cellsorter.pulse_suction(int(suctionInput.text())))
+        suction_row.addWidget(suctionButton)
+        rows.addLayout(suction_row)
+
+        #add pressure control row (label, input, button)
+        pressure_row = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel(name)
+        label.setText("Pressure")
+        label.setAlignment(Qt.AlignCenter)
+        pressure_row.addWidget(label)
+
+        #add pressure text input
+        pressureInput = QtWidgets.QLineEdit()
+        pressureInput.setPlaceholderText('Duration (ms)')
+        pressureInput.setValidator(QtGui.QIntValidator())
+        pressure_row.addWidget(pressureInput)
+
+        label = QtWidgets.QLabel(name)
+        label.setText("ms")
+        label.setAlignment(Qt.AlignCenter)
+        pressure_row.addWidget(label)
+
+        #add button
+        pressureButton = QtWidgets.QPushButton('Go')
+        pressureButton.clicked.connect(lambda: self.pipette_interface.calibrated_cellsorter.pulse_pressure(int(pressureInput.text())))
+        pressure_row.addWidget(pressureButton)
+        rows.addLayout(pressure_row)
+
+
+        #add rows to layout
+        posLayout.setLayout(rows)
+        layout.addWidget(posLayout)
+
+        
+        
+
+
+
+
+

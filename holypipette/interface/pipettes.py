@@ -7,14 +7,15 @@ from PyQt5 import QtCore
 
 from holypipette.interface import TaskInterface, command, blocking_command
 from holypipette.devices.manipulator.calibratedunit import CalibratedUnit, CalibratedStage, CalibrationConfig
+from holypipette.devices.cellsorter import CalibratedCellSorter
 import time
 
 class PipetteInterface(TaskInterface):
     '''
-    Controller for the stage, the microscope, and several pipettes.
+    Controller for the stage, the microscope, a pipette, and the cell sorter.
     '''
 
-    def __init__(self, stage, microscope, camera, unit,
+    def __init__(self, stage, microscope, camera, unit, cellsorterManip, cellsorterController,
                  config_filename='calibration.pickle'):
         super(PipetteInterface, self).__init__()
         self.microscope = microscope
@@ -28,6 +29,7 @@ class PipetteInterface(TaskInterface):
                                                 microscope,
                                                 camera,
                                                 config=self.calibration_config)
+        self.calibrated_cellsorter = CalibratedCellSorter(cellsorterManip, cellsorterController, self.calibrated_stage, microscope, camera)
 
         if config_filename is not None:
             #read calibration from file
@@ -181,7 +183,12 @@ class PipetteInterface(TaskInterface):
             self.pos_before_raise = None
         else:
             raise RuntimeError('Pipette not raised')
-
+        
+    @blocking_command(category='Cell Sorter',
+                    description='calibrate the cell sorter',
+                    task_description='Calibrating the cell sorter')
+    def calibrate_cell_sorter(self):
+        self.execute(self.calibrated_cellsorter.calibrate)
 
     @blocking_command(category='Manipulators',
                      description='Move stage to position',

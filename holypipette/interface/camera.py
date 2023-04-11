@@ -63,7 +63,7 @@ class CameraInterface(TaskInterface):
         except ImportError:
             self.error('Saving images needs the PIL or Pillow module')
             return
-        frame = self.camera.snap()
+        frame, _ = self.camera.snap()
         fname, _ = QtWidgets.QFileDialog.getSaveFileName(caption='Save image',
                                                          filter='Images (*.png, *.tiff)',
                                                          options=QtWidgets.QFileDialog.DontUseNativeDialog)

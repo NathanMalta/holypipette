@@ -68,11 +68,48 @@ class DAQ:
         return task
     
     def getDataFromSquareWave(self, wave_freq, samplesPerSec, dutyCycle, amplitude, recordingTime):
+
+        #grab data from DAQ
         sendTask = self._sendSquareWave(wave_freq, samplesPerSec, dutyCycle, amplitude, recordingTime)
         sendTask.start()
-        data = self._readAnalogInput()
+        raw_data = self._readAnalogInput()
         sendTask.stop()
         sendTask.close()
+
+        #process data -- add triggering and y shift to low = 0
+
+        mean = np.mean(raw_data)
+
+        #split array into greater than and less than mean (high and low portions of squarewave)
+        low_values = raw_data[:, raw_data < mean]
+        high_values = raw_data[:, raw_data > mean]
+
+        low_mean = np.mean(low_values)
+        high_mean = np.mean(high_values)
+
+        # set low to mean 0
+        raw_data -= low_mean
+        triggerSpots = np.where(raw_data[1, :] > self.triggerLevel)[0]
+        lowSpots = np.where(raw_data[1, :] < 0)[0]
+
+        #find first rising edge (first low to high transition)
+        if len(lowSpots) == 0 or len(triggerSpots) == 0:
+            print("no rising edge found")
+            return raw_data
+        try:
+            # get rising edge location (first trigger spot after first low spot)
+            rising_edge = triggerSpots[triggerSpots > lowSpots[0]][0]
+            falling_edge = lowSpots[lowSpots > rising_edge][0]
+            second_rising_edge = triggerSpots[triggerSpots > falling_edge][0]
+
+            timePerSample = recordingTime / self.numSamples
+
+            # trim data to rising edge
+            squarewave = raw_data[:, rising_edge:second_rising_edge]
+
+            self.lastestDaqData = squarewave
+        except:
+            return raw_data #could not trigger to rising edge
 
         xdata = np.linspace(0, recordingTime, self.numSamples, dtype=float)
 

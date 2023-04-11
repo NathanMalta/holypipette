@@ -87,6 +87,18 @@ class AutoPatchInterface(TaskInterface):
         if len(self.cells_to_patch) > 0:
             self.cells_to_patch = self.cells_to_patch[:-1]
 
+    @blocking_command(category='Cell Sorter',
+            description='Move the cell sorter to a cell',
+            task_description='Move the cell sorter to a cell')
+    def move_cellsorter_to_cell(self):
+        #grab cell from list
+        cellx = self.cells_to_patch[0][0]
+        celly = self.cells_to_patch[0][1]
+        cellz = self.pipette_controller.calibrated_unit.microscope.floor_Z
+
+        #move cell sorter to cell
+        self.execute(self.pipette_controller.calibrated_cellsorter.center_cellsorter_on_point, argument=[cellx, celly, cellz])
+
     @command(category='Patch', description='Add a mouse position to the list of cells to patch')
     def add_cell(self, position):
         #add half the size of the camera image to the position to get the center of the cell
