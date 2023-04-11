@@ -16,9 +16,12 @@ pipetteManip = FakeManipulator(min=[0, 0, 0],
                                       max=[4000, 20000, 20000])
 stage = ManipulatorUnit(controller, [1, 2])
 
+cellSorterController = FakeCellSorterController()
+cellSorterManip = FakeCellSorterManip()
+
 pipetteManip.x = [200, 300, 400] # start with pipette in frame
 controller.x = [-235000, 55000, 285000]
-camera = FakeCalCamera(stageManip=controller, pipetteManip=pipetteManip, image_z=100)
+camera = FakeCalCamera(stageManip=controller, pipetteManip=pipetteManip, image_z=100, cellSorterManip=cellSorterManip)
 microscope = Microscope(controller, 3)
 microscope.up_direction = 1.0
 
@@ -27,6 +30,3 @@ unit = ManipulatorUnit(pipetteManip, [1, 2, 3])
 daq = FakeDAQ()
 amplifier = FakeAmplifier()
 pressure = FakePressureController()
-
-cellSorter = FakeCellSorterController()
-cellSorterManip = FakeCellSorterManip()

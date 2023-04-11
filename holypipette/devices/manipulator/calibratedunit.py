@@ -145,7 +145,7 @@ class CalibratedUnit(ManipulatorUnit):
         Converts pixel coordinates to pipette um.
         '''
         if self.Minv.shape[1] == 2: #2x2 stage movement
-            xy = dot(self.Minv, pos_pixels[0:2]) + self.r0_inv
+            xy = dot(self.Minv, pos_pixels[0:2]) + self.r0_inv[0:2]
             return np.array([xy[0], xy[1], 0])
         else: #3x3 pipette movement
             return dot(self.Minv, pos_pixels) + self.r0_inv
@@ -493,13 +493,10 @@ class CalibratedStage(CalibratedUnit):
 
         #for M and Minv, we only want the upper 2x2 matrix (b/c assumption that z axis is equivilant), the rest of the matrix is just the identity
         self.M = mat[0:2, 0:2]
-
         self.Minv = mat_inv[0:2, 0:2]
-        
         self.calibrated = True
 
         self.info('Stage calibration done')
-        # self.analyze_calibration()
 
 
 
@@ -537,14 +534,14 @@ class CalibratedStage(CalibratedUnit):
 
         try:
             for row in range(ny):
-                img = self.camera.snap()
+                img, _ = self.camera.snap()
                 big_image[row*dy:(row+1)*dy, column*dx:(column+1)*dx] = img
                 for _ in range(1,nx):
                     column+=xdirection
                     self.reference_relative_move([-dx*xdirection,0,0]) # sign: it's a compensatory move
                     self.wait_until_still()
                     self.sleep(0.1)
-                    img = self.camera.snap()
+                    img, _ = self.camera.snap()
                     big_image[row * dy:(row + 1) * dy, column * dx:(column + 1) * dx] = img
                 if row<ny-1:
                     xdirection = -xdirection

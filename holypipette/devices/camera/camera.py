@@ -164,8 +164,8 @@ class Camera(object):
         self.point_to_show = None
         self.cell_list = []
     
-    def show_point(self, point, duration=1.5):
-        self.point_to_show = point
+    def show_point(self, point, color=(255, 0, 0), radius=10, duration=1.5):
+        self.point_to_show = [point, radius, color]
         self.stop_show_time = time.time() + duration
 
     def start_acquisition(self):
@@ -206,7 +206,7 @@ class Camera(object):
         #draw a temporary point if needed (used to show pipette tip during cal)
         if time.time() - self.stop_show_time < 0:
             if self.point_to_show is not None:
-                img = cv2.circle(img, self.point_to_show, 10, (255, 0, 0), 3)
+                img = cv2.circle(img, self.point_to_show[0], self.point_to_show[1], self.point_to_show[2], 3)
 
         #draw cell outlines
         for cell in self.cell_list:
