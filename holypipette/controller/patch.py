@@ -89,8 +89,10 @@ class AutoPatcher(TaskController):
         self.debug("Resistance:" + str(R/1e6))
 
         if R < self.config.min_R:
-            raise AutopatchError("Resistance is too low (broken tip?)")
+            print("Resistance is too low (broken tip?)")
+            # raise AutopatchError("Resistance is too low (broken tip?)")
         elif R > self.config.max_R:
+            print("Resistance is too high (obstructed?)")
             raise AutopatchError("Resistance is too high (obstructed?)")
         #self.initial_resistance = R
 
@@ -126,7 +128,8 @@ class AutoPatcher(TaskController):
             # Check resistance again
             Rnow = self.amplifier.resistance()
             if Rnow > R * (1 + self.config.cell_R_increase):
-                raise AutopatchError("Pipette is obstructed; R = " + str(Rnow/1e6))
+                print("Pipette is obstructed; R = " + str(Rnow/1e6))
+                # raise AutopatchError("Pipette is obstructed; R = " + str(Rnow/1e6))
 
             # Pipette offset
             self.amplifier.auto_pipette_offset()
