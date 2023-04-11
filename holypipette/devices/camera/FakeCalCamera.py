@@ -1,3 +1,4 @@
+from holypipette.devices.cellsorter.CellSorter import CellSorterManip
 from holypipette.devices.manipulator import Manipulator, FakeManipulator
 from .camera import Camera
 import numpy as np
@@ -9,7 +10,7 @@ import math
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 
 class FakeCalCamera(Camera):
-    def __init__(self, stageManip=None, pipetteManip=None, image_z=0, targetFramerate=40):
+    def __init__(self, stageManip=None, pipetteManip=None, image_z=0, targetFramerate=40, cellSorterManip=None):
         super(FakeCalCamera, self).__init__()
         self.width : int = 1024
         self.height : int = 1024
@@ -20,14 +21,10 @@ class FakeCalCamera(Camera):
         self.pixels_per_micron : float = 1.25  # pixels / micrometers
         self.frameno : int = 0
         self.pipette = FakePipette(self.pipetteManip, self.pixels_per_micron)
-        self.targetFramerate = 40
+        self.targetFramerate = targetFramerate
+        self.cellSorterManip = cellSorterManip
+        self.cellSorterHandler = FakeCellSorterHandler(self.stageManip, self.cellSorterManip, [400, 200, 0], self.pixels_per_micron)
 
-        #create checkerboard pattern on smaller image
-        # self.frame = np.zeros((self.width // 20, self.height // 20), dtype=np.uint16)#np.array(np.clip((np.random.randn(self.width * 2, self.height * 2)*0.5)*50 + 128, 0, 255), dtype=np.uint8)
-        # self.frame[1::2,::2] = 255
-        # self.frame[::2,1::2] = 255
-
-        # uncomment this to show a cell image rather than checkerboard
         curFile = str(Path(__file__).parent.absolute())
 
         #setup frame image (numpy because of easy rolling)
@@ -39,7 +36,7 @@ class FakeCalCamera(Camera):
 
         #creating large noise arrays slows down fps, create 100 arrays at startup instead
         self.noiseArrs = []
-        for i in range(100):
+        for _ in range(100):
             self.noiseArrs.append((np.random.random((self.width, self.height)) * 30).astype(np.uint16))
 
         #start image recording thread
@@ -109,6 +106,9 @@ class FakeCalCamera(Camera):
         #add pipette to image
         frame = self.pipette.add_pipette_to_img(frame, [stage_x, stage_y, stage_z])
 
+        #add cellsorter to image
+        frame = self.cellSorterHandler.add_cellsorter_to_img(frame, [stage_x, stage_y, stage_z])
+
         #add noise, exposure
         exposure_factor = self.exposure_time/30.
 
@@ -122,7 +122,50 @@ class FakeCalCamera(Camera):
             time.sleep((1/self.targetFramerate) - dt)
         
         return frame
+    
+class FakeCellSorterHandler():
+    def __init__(self, stage : Manipulator, cellSorterManip : CellSorterManip, cellSorterOffset : np.ndarray, pixels_per_micron : float):
+        self.stage = stage
+        self.cellSorterManip = cellSorterManip
+        self.cellSorterOffset = cellSorterOffset
+        self.pixels_per_micron = pixels_per_micron
 
+    def add_cellsorter_to_img(self, img : np.ndarray, stage_pos : np.ndarray):
+        stage_x, stage_y, stage_z = stage_pos
+
+        # get cellsorter pos
+        cellSorter_z = self.cellSorterManip.position()
+
+        #covert to pixels
+        cellSorterXY = [self.cellSorterOffset[0] * self.pixels_per_micron, self.cellSorterOffset[1] * self.pixels_per_micron]
+
+        #else cell sorter pipette in frame: add it to image - 2 channel (grayscale, alpha)
+        cellSorterImg = np.zeros((img.shape[0], img.shape[1], 2), dtype=np.float32)
+
+        #pipette looks like a black ring while in focus
+        cv2.circle(cellSorterImg, (int(cellSorterXY[0]), int(cellSorterXY[1])), thickness=40, radius=100, color=(0, 1))
+
+        #blur proportionally to how far cellsorter_z is from 0 (being focused in the img plane)
+        focusFactor = abs(cellSorter_z - stage_z - self.cellSorterOffset[2]) / 10
+        if focusFactor == 0:
+            focusFactor = 0.1
+        
+        cellSorterImg = cv2.GaussianBlur(cellSorterImg, (63,63), focusFactor)
+
+        #add to image (with alpha blending)
+        img = img.astype(np.float32)
+        img = img * (1 - cellSorterImg[:, :, 1]) + cellSorterImg[:, :, 0] * cellSorterImg[:, :, 1]
+        
+        return img.astype(np.uint8)
+
+            
+
+
+
+
+
+
+    
 class FakePipetteManipulator(FakeManipulator):
     def __init__(self, min=None, max=None, armAngle=np.pi/6):
         super(FakePipetteManipulator, self).__init__(min, max)

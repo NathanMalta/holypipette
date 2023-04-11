@@ -30,7 +30,7 @@ class EPhysGraph(QWidget):
 
         #constants for Multi Clamp
         self.externalCommandSensitivity = 20 #mv/V
-        self.triggerLevel = 0.05 #V
+        self.triggerLevel = 10000 #V
 
         #setup window
         self.setWindowTitle("Electrophysiology")
@@ -79,56 +79,7 @@ class EPhysGraph(QWidget):
 
     def updateDAQDataAsync(self):
         while True:
-            raw_data = self.daq.getDataFromSquareWave(10, 5000, 0.5, 0.1, 0.5)
-
-            mean = np.mean(raw_data[1, :])
-            #split array into greater than and less than mean
-            low_values = raw_data[:, raw_data[1, :] < mean]
-            high_values = raw_data[:, raw_data[1, :] > mean]
-
-            low_mean = np.mean(low_values[1, :])
-            high_mean = np.mean(high_values[1, :])
-
-            # set low to mean 0
-            raw_data[1, :] -= low_mean
-            triggerSpots = np.where(raw_data[1, :] > self.triggerLevel)[0]
-            lowSpots = np.where(raw_data[1, :] < 0)[0]
-
-            #find first rising edge (first low to high transition)
-            if len(lowSpots) == 0 or len(triggerSpots) == 0:
-                #the singal doesn't exceed rising edge
-                self.lastestDaqData = raw_data
-                continue
-
-            try:
-                # get rising edge location (first trigger spot after first low spot)
-                rising_edge = triggerSpots[triggerSpots > lowSpots[0]][0]
-                falling_edge = lowSpots[lowSpots > rising_edge][0]
-                second_rising_edge = triggerSpots[triggerSpots > falling_edge][0]
-
-                #convert data from mV to pA
-
-                #high side
-                cmdVoltage = 0.02 * 0.1
-                #pg 99 of manual
-                raw_data[1, rising_edge:falling_edge] = -(cmdVoltage - raw_data[1, rising_edge:falling_edge]) / 500e6
-                
-                #low side
-                raw_data[1, falling_edge:second_rising_edge] = -(0 - raw_data[1, falling_edge:second_rising_edge]) / 500e6
-                
-                # trim data to just the square wave
-                squarewave = raw_data[:, rising_edge:second_rising_edge]
-
-                mean_current = np.mean(raw_data[1, rising_edge:falling_edge])
-
-                self.lastestDaqData = squarewave
-                
-                R_total = cmdVoltage / mean_current
-                print(f'voltage {cmdVoltage}, current {mean_current} R_total: {R_total / 1e6} MegaOhms')
-
-            except:
-                #the signal isn't in the expected square wave
-                self.lastestDaqData = raw_data
+            self.lastestDaqData = self.daq.getDataFromSquareWave(10, 50000, 0.5, 0.5, 0.5)
             time.sleep(0.1)
 
     def update_plot(self):
@@ -136,6 +87,7 @@ class EPhysGraph(QWidget):
         if self.lastestDaqData is not None:
             self.squareWavePlot.clear()
             self.squareWavePlot.plot(self.lastestDaqData[0], self.lastestDaqData[1])
+            # self.squareWavePlot.setYRange(-200, 200)
             self.lastestDaqData = None
         
         self.pressureData.append(self.pressureController.measure())
