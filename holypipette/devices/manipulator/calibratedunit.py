@@ -145,7 +145,7 @@ class CalibratedUnit(ManipulatorUnit):
         Converts pixel coordinates to pipette um.
         '''
         if self.Minv.shape[1] == 2: #2x2 stage movement
-            xy = dot(self.Minv, pos_pixels[0:2]) + self.r0_inv
+            xy = dot(self.Minv, pos_pixels[0:2]) + self.r0_inv[0:2]
             return np.array([xy[0], xy[1], 0])
         else: #3x3 pipette movement
             return dot(self.Minv, pos_pixels) + self.r0_inv
