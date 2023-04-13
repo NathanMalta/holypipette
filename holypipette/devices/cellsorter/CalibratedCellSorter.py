@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 
 from holypipette.devices.camera.camera import Camera
 from holypipette.devices.cellsorter import CellSorterManip
@@ -16,7 +17,11 @@ class CalibratedCellSorter(TaskController):
         self.camera = camera
         self.microscope = microscope
         self.calibrated = False
-        self.pipetteOffset = None
+        self.pipetteOffsetPix = None
+        self.coverslipZPos = None
+        self.slowMoveRegion = 0.5 #mm
+        self.slowMoveSpeed = 0.2
+        self.fastMoveSpeed = 5
 
     def pulse_suction(self, duration):
         self.cellsorterController.open_valve_for_time(1, duration)
@@ -27,11 +32,21 @@ class CalibratedCellSorter(TaskController):
     def position(self):
         return self.cellsorterManip.position()
     
-    def absolute_move(self, position):
-        self.cellsorterManip.absolute_move(position)
+    def absolute_move(self, position, velocity=None):
+        print('velocity', velocity)
+        self.cellsorterManip.absolute_move(position, velocity=velocity)
     
-    def relative_move(self, position):
-        self.cellsorterManip.relative_move(position)
+    def relative_move(self, position, velocity=None):
+        self.cellsorterManip.relative_move(position, velocity=velocity)
+
+    def set_led_status(self, status, ring=None):
+        self.cellsorterController.set_led(status)
+        if ring != None:
+            self.cellsorterController.set_led_ring(ring)
+
+    def get_led_status(self):
+        return self.cellsorterController.get_led()
+
 
     def calibrate(self):
         #make sure stage is calibrated
@@ -46,11 +61,11 @@ class CalibratedCellSorter(TaskController):
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         #find the center of the tube via hough transform
-        img = cv2.medianBlur(img, 5)
+        img = cv2.medianBlur(img, 19)
         #add channel dimension to make it 3D
         img = img[:, :, np.newaxis]
         circles = cv2.HoughCircles(img, cv2.HOUGH_GRADIENT, 1, 20,
-                                      param1=50, param2=30, minRadius=30, maxRadius=100)
+                                      param1=50, param2=30, minRadius=100, maxRadius=300)
         
         if circles is None or len(circles) == 0:
             raise Exception("No circles found in image")
@@ -60,35 +75,56 @@ class CalibratedCellSorter(TaskController):
         
         #get the center of the pipette
         x, y, r = circles[0][0]
+        self.camera.show_point([int(x), int(y)], radius=int(r), color=(0, 0, 255), show_center=True)
 
         self.pipetteOffsetPix = np.array([x, y])
-        self.pipetteOffsetZ = self.microscope.position() - self.cellsorterManip.position()
+        self.coverslipZPos = self.position()
 
         print("Pipette offset: ", self.pipetteOffsetPix)
-        print("Pipette Z: ", self.pipetteOffsetZ)
+        print("Coverslip Z position: ", self.coverslipZPos)
 
         #draw a circle on the image
-        self.camera.show_point([int(x), int(y)], radius=int(r), color=(0, 0, 255))
         self.calibrated = True
+
+    def raise_pipette(self):
+        self.cellsorterManip.set_max_speed(self.fastMoveSpeed)
+        self.absolute_move(self.position() + 5)
+        self.cellsorterManip.wait_until_still()
     
     def center_cellsorter_on_point(self, point): #x,y in pixels, z in stage units
         x, y, z = point
         if not self.stage.calibrated:
             raise Exception("Stage is not calibrated")
-        if not self.calibrated or self.pipetteOffsetPix is None:
+        if not self.calibrated or self.pipetteOffsetPix is None or self.coverslipZPos is None:
             raise Exception("Cell Sorter is not calibrated")
-        if self.microscope.floor_Z == None:
-            raise Exception("Cell Plane not set")
-        
+
+        self.raise_pipette()     
 
         #move the stage such that it's centered in x, y, put cells in focus
         self.microscope.absolute_move(self.microscope.floor_Z)
         self.stage.reference_move(np.array([x + self.pipetteOffsetPix[0], y + self.pipetteOffsetPix[1]]))
         print("moving stage to cell")
-        self.stage.wait_until_still()
+        self.stage.wait_until_reached(np.array([x + self.pipetteOffsetPix[0], y + self.pipetteOffsetPix[1]]))
+        time.sleep(0.5)
 
-        print("moving cellsorter to cell")
+        print("moving cellsorter to cell plane")
         #move the cellsorter to the cell plane
-        self.cellsorterManip.absolute_move(z - self.pipetteOffsetZ)
+        currentPos = self.position()
+        if abs(currentPos - self.coverslipZPos) < self.slowMoveRegion:
+            #move slowly to setpoint
+            self.absolute_move(self.coverslipZPos, self.slowMoveSpeed)
+            self.cellsorterManip.wait_until_still()
+        else:
+            print('fast move')
+            #move quickly to slowMoveRegion away from setpoint
+            initSetpoint = self.coverslipZPos + np.sign(self.slowMoveRegion - self.coverslipZPos) * self.slowMoveRegion
+            self.absolute_move(initSetpoint, self.fastMoveSpeed)
+            self.cellsorterManip.wait_until_still()
+            print(f'slow move')
+            #move slowly to setpoint
+            self.absolute_move(self.coverslipZPos, self.slowMoveSpeed)
+            self.cellsorterManip.wait_until_still()
+
+        self.absolute_move(self.coverslipZPos)
         print('done')
 

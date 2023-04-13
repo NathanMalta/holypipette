@@ -322,6 +322,35 @@ class CellSorterButtons(ButtonTabWidget):
         pressure_row.addWidget(pressureButton)
         rows.addLayout(pressure_row)
 
+        #add radio button options for light (off, ring1, ring2)
+        light_row = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel(name)
+        label.setText("Light")
+        label.setAlignment(Qt.AlignCenter)
+        light_row.addWidget(label)
+
+        #add radio buttons
+        lightGroup = QtWidgets.QButtonGroup()
+        lightGroup.setExclusive(True)
+        lightOff = QtWidgets.QRadioButton('Off')
+        lightGroup.addButton(lightOff)
+        lightRing1 = QtWidgets.QRadioButton('Ring 1')
+        lightGroup.addButton(lightRing1)
+        lightRing1.setChecked(True)
+        lightRing2 = QtWidgets.QRadioButton('Ring 2')
+        lightGroup.addButton(lightRing2)
+        #command cell sorter to turn off light when radio button is clicked
+        lightOff.clicked.connect(lambda: self.pipette_interface.calibrated_cellsorter.set_led_status(False))
+        lightRing1.clicked.connect(lambda: self.pipette_interface.calibrated_cellsorter.set_led_status(True, 1))
+        lightRing2.clicked.connect(lambda: self.pipette_interface.calibrated_cellsorter.set_led_status(True, 2))
+        
+        light_row.addWidget(lightOff)
+        light_row.addWidget(lightRing1)
+        light_row.addWidget(lightRing2)
+        rows.addLayout(light_row)
+
+
+
 
         #add rows to layout
         posLayout.setLayout(rows)
