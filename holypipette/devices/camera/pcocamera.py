@@ -7,8 +7,6 @@ import time
 from . import *
 import warnings
 import pco
-from holypipette.deepLearning.pipetteFinder import PipetteFinder
-from holypipette.deepLearning.pipetteFocuser import PipetteFocuser, FocusLevels
 
 try:
     import cv2
@@ -52,8 +50,6 @@ class PcoCamera(Camera):
 
         self.upperBound = 255
         self.lowerBound = 0
-        # self.pipetteFinder = PipetteFinder()
-        self.pipetteFocuser = PipetteFocuser()
 
         self.normalize() #normalize image on startup
 

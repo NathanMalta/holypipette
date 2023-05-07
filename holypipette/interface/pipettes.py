@@ -7,7 +7,6 @@ from PyQt5 import QtCore
 
 from holypipette.interface import TaskInterface, command, blocking_command
 from holypipette.devices.manipulator.calibratedunit import CalibratedUnit, CalibratedStage, CalibrationConfig
-from holypipette.devices.cellsorter import CalibratedCellSorter
 import time
 
 class PipetteInterface(TaskInterface):
@@ -15,8 +14,7 @@ class PipetteInterface(TaskInterface):
     Controller for the stage, the microscope, a pipette, and the cell sorter.
     '''
 
-    def __init__(self, stage, microscope, camera, unit, cellsorterManip, cellsorterController,
-                 config_filename='calibration.pickle'):
+    def __init__(self, stage, microscope, camera, unit):
         super(PipetteInterface, self).__init__()
         self.microscope = microscope
         self.camera = camera
@@ -29,24 +27,10 @@ class PipetteInterface(TaskInterface):
                                                 microscope,
                                                 camera,
                                                 config=self.calibration_config)
-        self.calibrated_cellsorter = CalibratedCellSorter(cellsorterManip, cellsorterController, self.calibrated_stage, microscope, camera)
 
-        if config_filename is not None:
-            #read calibration from file
-            if os.path.isfile(config_filename):
-                with open(config_filename, 'rb') as f:
-                    cal = pickle.load(f)
-                    self.calibrated_unit.load_configuration(cal['manip'])
-                    self.calibrated_stage.load_configuration(cal['stage'])
-
-                    print('Loaded calibration from file!')
-                    print('Manipulator calibration:')
-                    print(cal['manip'])
-                    print('Stage calibration:')
-                    print(cal['stage'])
-            else:
-                print('No calibration file found, need to calibrate before usage!')
-
+        self.calibrated_unit.load_configuration('M')
+        self.calibrated_stage.load_configuration('S')
+        print('loaded dummy config')
 
         self.cleaning_bath_position = None
         self.contact_position = None
@@ -184,12 +168,6 @@ class PipetteInterface(TaskInterface):
         else:
             raise RuntimeError('Pipette not raised')
         
-    @blocking_command(category='Cell Sorter',
-                    description='calibrate the cell sorter',
-                    task_description='Calibrating the cell sorter')
-    def calibrate_cell_sorter(self):
-        self.execute(self.calibrated_cellsorter.calibrate)
-
     @blocking_command(category='Manipulators',
                      description='Move stage to position',
                      task_description='Moving stage to position')

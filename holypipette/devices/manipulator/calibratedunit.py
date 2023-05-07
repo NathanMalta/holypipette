@@ -22,8 +22,6 @@ from holypipette.devices.manipulator import *
 
 from numpy.linalg import inv, pinv, norm
 from threading import Thread
-from .StageCalHelper import FocusHelper, StageCalHelper
-from .PipetteCalHelper import PipetteCalHelper, PipetteFocusHelper
 
 __all__ = ['CalibratedUnit', 'CalibrationError', 'CalibratedStage']
 
@@ -114,10 +112,6 @@ class CalibratedUnit(ManipulatorUnit):
         self.unit = unit
 
         self.emperical_offset = np.zeros(3) # offset for pipette position in px based on deep learning model
-
-        #setup pipette calibration helper class
-        self.pipetteCalHelper = PipetteCalHelper(unit, self.microscope, camera, stage)
-        self.pipetteFocusHelper = PipetteFocusHelper(unit, camera)
 
     def save_state(self):
         if self.stage is not None:
@@ -212,36 +206,6 @@ class CalibratedUnit(ManipulatorUnit):
         if isinstance(self, CalibratedStage) or isinstance(self, FixedStage):
             return
         
-        emperical_poses = []
-        for i in range(10):
-            _, _, _, frame = self.camera.raw_frame_queue[0]
-            pos = self.pipetteCalHelper.pipetteFinder.find_pipette(frame)
-            if pos != None:
-                emperical_poses.append([pos[0], pos[1]])
-        
-        if len(emperical_poses) == 0:
-            print('No pipette found in image, can\'t run correction')
-            return
-        
-        pos_pixels_emperical = np.median(emperical_poses, axis=0)
-        pos_pixels_theoretical = self.reference_position()[0:2]
-
-        print('Theoretical position: ', pos_pixels_theoretical)
-        print('Emperical position: ', pos_pixels_emperical)
-        print('abs move completed!')
-
-        #update offset
-        self.emperical_offset[0:2] = pos_pixels_emperical - pos_pixels_theoretical
-        print('Emperical offset (pix): ', self.emperical_offset)
-              
-        correction = self.pixels_to_um_relative(self.emperical_offset)
-
-        #recalculate setpoint after offset correction
-        pos_micron = self.pixels_to_um(pos_pixels - self.stage.reference_position()) - correction
-
-        #move to emperical position
-        self.absolute_move(pos_micron, blocking=True)
-
     def focus(self):
         '''
         Move the microscope so as to put the pipette tip in focus
@@ -250,12 +214,6 @@ class CalibratedUnit(ManipulatorUnit):
             raise CalibrationError('Pipette not calibrated')
         self.microscope.absolute_move(self.reference_position()[2])
         self.microscope.wait_until_still()
-
-    def autofocus_pipette(self):
-        '''Use the microscope image to put the pipette in focus
-        '''
-        print('Autofocusing pipette')
-        self.pipetteFocusHelper.focus()
 
     def safe_move(self, r, withdraw = 0., recalibrate = False):
         '''
@@ -294,92 +252,6 @@ class CalibratedUnit(ManipulatorUnit):
             p.append(((M[0,axis]**2 + M[1,axis]**2))**.5) #TODO: is this correct? 
         return p
     
-    def record_cal_point(self):
-        self.pipetteCalHelper.record_cal_point()
-
-    def finish_calibration(self):
-        '''
-        Automatic calibration of the pipette manipulator.
-        '''
-        
-        # move the pipette and create a calibration matrix (pix -> um)
-        mat = self.pipetteCalHelper.calibrate()
-        
-        #make matrix 4x4 for inverse
-        mat = np.vstack((mat, np.array([0,0,0,1])))
-
-        self.stage.pipette_cal_position = self.stage.position() #update the position the pipette was calibrated at
-
-        # *** Compute the (pseudo-)inverse ***
-        mat_inv = pinv(mat)
-
-        print(f'calibration matrix: {mat}')
-        print('inv : ', mat_inv)
-
-        # store r0 and r0_inv
-        self.r0 = mat[0:3, 3] #um -> pixels offset
-        self.r0_inv = mat_inv[0:3, 3] #pixels -> um offset
-
-        #just 3x3 portion of M for self.M
-        self.M = mat[0:3, 0:3]
-
-        #just 3x3 portion of Minv
-        self.Minv = mat_inv[0:3, 0:3]
-
-
-        #check for nan values (invalid cal)
-        if isnan(self.M).any() or isnan(self.Minv).any():
-            raise CalibrationError('Matrix contains NaN values')
-
-        print('Calibration Successful!')
-        print('M: ', self.M)
-        print('r0: ', self.r0)
-        print()
-        print('Minv: ', self.Minv)
-        print('r0_inv: ', self.r0_inv)
-
-        self.calibrated = True
-    
-
-    def recalibrate_pipette(self):
-        '''recalibrate pipette offset while keeping matrix
-        '''
-        print('recalculating piptte offsets...')
-        emperical_poses = []
-        for i in range(10):
-            _, _, _, frame = self.camera.raw_frame_queue[0]
-            pos = self.pipetteCalHelper.pipetteFinder.find_pipette(frame)
-            if pos != None:
-                emperical_poses.append([pos[0], pos[1]])
-        
-        if len(emperical_poses) == 0:
-            print('No pipette found in image, can\'t run correction')
-            return
-        
-        new_offset = np.zeros(3)
-        pos_pixels_emperical = np.median(emperical_poses, axis=0)
-        pos_pixels_emperical = np.append(pos_pixels_emperical, self.microscope.position())
-        new_offset = pos_pixels_emperical - self.um_to_pixels_relative(self.dev.position()) - self.stage.reference_position()
-        print('Old offsets: ', self.r0, self.r0_inv)
-
-        self.r0 = np.array(new_offset)
-
-        #create r0_inv
-        #first create homogenous matrix
-
-        homogenous_mat = np.zeros((4,4))
-        homogenous_mat[0:3, 0:3] = self.M
-        homogenous_mat[0:3, 3] = self.r0
-        homogenous_mat[3, 3] = 1
-
-        #invert
-        homogenous_mat_inv = pinv(homogenous_mat)
-
-        #get r0_inv
-        self.r0_inv = homogenous_mat_inv[0:3, 3]
-
-        print('New offsets: ', self.r0, self.r0_inv)
-
 
     def save_configuration(self):
         '''
@@ -393,13 +265,19 @@ class CalibratedUnit(ManipulatorUnit):
 
     def load_configuration(self, config):
         '''
-        Loads configuration from dictionary config.
-        Variables not present in the dictionary are untouched.
+        Loads dummy configuration for either 'M' (manipulator) or 'S' (stage)
         '''
-        self.M = config.get('M', self.M)
+
+        if config == 'M':
+            self.M = np.eye(3)
+            self.r0 = np.zeros(3)
+        else:
+            self.M = -np.eye(2) # image x, y are top down, flip them to be top up
+            self.r0 = np.zeros(2)
+
         self.Minv = pinv(self.M)
+
         self.calibrated = True
-        self.r0 = config.get('r0', self.r0)
 
 class CalibratedStage(CalibratedUnit):
     '''
@@ -421,9 +299,6 @@ class CalibratedStage(CalibratedUnit):
                                 config=config)
         self.saved_state_question = 'Move stage back to initial position?'
 
-        self.focusHelper = FocusHelper(microscope, camera)
-        self.stageCalHelper = StageCalHelper(unit, camera, self.config.frame_lag)
-        self.pipette_cal_position = np.zeros(2)
         self.unit = unit
 
         # It should be an XY stage, ie, two axes
@@ -468,37 +343,6 @@ class CalibratedStage(CalibratedUnit):
             
         pos_microns = dot(self.Minv, pos_pix)
         self.relative_move(pos_microns)
-
-    def calibrate(self):
-        '''
-        Automatic calibration for a horizontal XY stage
-
-        '''
-        if not self.stage.calibrated:
-            self.stage.calibrate()
-
-        self.info('Preparing stage calibration')
-        self.info("auto focusing microscope...")
-        self.focusHelper.autofocus(dist=self.config.autofocus_dist)
-        self.info("Finished focusing.")
-
-        # use LK optical flow to determine transformation matrix
-        mat = self.stageCalHelper.calibrate(dist=self.config.stage_diag_move)
-        mat = np.append(mat, np.array([[0,0,1]]), axis=0)
-        mat_inv = pinv(mat)
-
-        # store r0 and r0_inv
-        self.r0 = mat[0:2, 2] #um -> pixels offset
-        self.r0_inv = mat_inv[0:2, 2] #pixels -> um offset
-
-        #for M and Minv, we only want the upper 2x2 matrix (b/c assumption that z axis is equivilant), the rest of the matrix is just the identity
-        self.M = mat[0:2, 0:2]
-        self.Minv = mat_inv[0:2, 0:2]
-        self.calibrated = True
-
-        self.info('Stage calibration done')
-
-
 
     def mosaic(self, width = None, height = None):
         '''

@@ -6,22 +6,18 @@ from holypipette.devices.amplifier.DAQ import FakeDAQ
 from holypipette.devices.camera.pcocamera import PcoCamera
 from holypipette.devices.pressurecontroller import FakePressureController
 from holypipette.devices.camera.camera import FakeCamera
-from holypipette.devices.camera import FakeCalCamera, FakePipetteManipulator
+from holypipette.devices.camera import FakeCalCamera
 from holypipette.devices.manipulator import *
-from holypipette.devices.cellsorter import FakeCellSorterController, FakeCellSorterManip
 
-controller = FakeManipulator(min=[-240000, 50000, 280000],
-                             max=[-230000, 60000, 290000])
+controller = FakeManipulator(min=[-1000, -1000, -1000],
+                             max=[1000, 1000, 1000])
 pipetteManip = FakeManipulator(min=[0, 0, 0],
                                       max=[4000, 20000, 20000])
 stage = ManipulatorUnit(controller, [1, 2])
 
-cellSorterController = FakeCellSorterController()
-cellSorterManip = FakeCellSorterManip()
-
 pipetteManip.x = [200, 300, 400] # start with pipette in frame
-controller.x = [-235000, 55000, 285000]
-camera = FakeCalCamera(stageManip=controller, pipetteManip=pipetteManip, image_z=100, cellSorterManip=cellSorterManip)
+controller.x = [0, 0, 0]
+camera = FakeCalCamera(stageManip=controller, pipetteManip=pipetteManip, image_z=0)
 microscope = Microscope(controller, 3)
 microscope.up_direction = 1.0
 
