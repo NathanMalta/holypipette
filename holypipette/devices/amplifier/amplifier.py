@@ -1,4 +1,6 @@
 from holypipette.controller.base import TaskController
+from holypipette.devices.camera import WorldModel
+
 
 all = ['Amplifier',  'FakeAmplifier']
 
@@ -83,12 +85,13 @@ class FakeAmplifier(Amplifier):
     "Fake" amplifier that only notes down changes/commands
     """
 
-    def __init__(self):
+    def __init__(self, worldModel=None):
         self._mode = 'voltage clamp'
         self._resistance = 10*1e6
         self._holding = -70  # holding potential for voltage clamp, holding current for current clamp
         self._patching = False
         self._zap_duration = 0.1
+        self._worldModel:WorldModel = worldModel
 
     def start_patch(self, pulse_amplitude=1e-2,
                     pulse_frequency=1e-2):  # Not clear what the units are for frequency
@@ -102,7 +105,7 @@ class FakeAmplifier(Amplifier):
         '''
         Returns resistance
         '''
-        return self._resistance
+        return self._worldModel.getResistance()
 
     def stop_patch(self):
         '''

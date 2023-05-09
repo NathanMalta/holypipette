@@ -8,18 +8,72 @@ import math
 
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 
+
+class WorldModel():
+    def __init__(self, pixels_per_micron=1, pipette_img_size=[1016, 354]):
+        # load cell annotations
+        curFile = str(Path(__file__).parent.absolute())
+        self.annotations = cv2.imread(curFile + "/FakeMicroscopeImgs/annotation.png", cv2.IMREAD_GRAYSCALE)
+        self.pipette_img_size = pipette_img_size
+        self.pixels_per_micron = pixels_per_micron
+
+        self.isPipetteCrashed = False
+        self.normalResistance = np.random.randint(4e6, 7e6) #4-7 Mohm
+        self.crashedResistance = np.random.randint(0.3e6, 2e6) #0.3-2 Mohm
+        self.pipetteResistanceNoise = 0.1e6 #0.1 Mohm
+
+    def getResistance(self):
+        if self.isPipetteCrashed:
+            return self.crashedResistance + np.random.random() * self.pipetteResistanceNoise
+        else:
+            return self.normalResistance + np.random.random() * self.pipetteResistanceNoise
+
+    def _isCellAtPos(self, x, y):
+        if self.annotations[y, x] > 0:
+            return True
+        else:
+            return False
+        
+    def isCellAtPos(self, pipette_pos, screen_size=[1024, 1024]):
+
+        #get pipette micron coords
+        pipette_x, pipette_y, pipette_z = pipette_pos
+        pipette_pos = np.array([pipette_x, pipette_y, pipette_z]) #already in stage coords because this sim uses identity matrix for stage_to_pipette
+
+        #get pipette position in image coordinates
+        pipette_pos_img_coords = pipette_pos * self.pixels_per_micron
+
+        #get x,y - convert to int, make relative to frame
+        pipette_img_x = int(pipette_pos_img_coords[0]) - self.annotations.shape[1] + screen_size[0] // 2
+        pipette_img_y = int(pipette_pos_img_coords[1]) + screen_size[1] // 2
+
+        #implement wrap around
+        pipette_img_x = pipette_img_x % self.annotations.shape[1]
+        pipette_img_y = pipette_img_y % self.annotations.shape[0]
+
+        #account for negatives
+        if pipette_img_x < 0:
+            pipette_img_x = self.annotations.shape[1] + pipette_img_x 
+        if pipette_img_y < 0:
+            pipette_img_y = self.annotations.shape[0] + pipette_img_y
+
+        return self._isCellAtPos(pipette_img_x, pipette_img_y)
+
+
+
 class FakeCalCamera(Camera):
-    def __init__(self, stageManip=None, pipetteManip=None, image_z=0, targetFramerate=40, cellSorterManip=None):
+    def __init__(self, stageManip=None, pipetteManip=None, image_z=0, targetFramerate=40, worldModel=None):
         super(FakeCalCamera, self).__init__()
         self.width : int = 1024
         self.height : int = 1024
         self.exposure_time : int = 30
         self.stageManip : Manipulator = stageManip
         self.pipetteManip : Manipulator = pipetteManip
+        self.worldModel : WorldModel = worldModel
         self.image_z : float = image_z
         self.pixels_per_micron : float = 1  # pixels / micrometers
         self.frameno : int = 0
-        self.pipette = FakePipette(self.pipetteManip, self.pixels_per_micron)
+        self.pipette = FakePipette(self.pipetteManip, self.pixels_per_micron, worldModel=self.worldModel)
         self.targetFramerate = targetFramerate
 
         curFile = str(Path(__file__).parent.absolute())
@@ -28,13 +82,8 @@ class FakeCalCamera(Camera):
         self.frame = cv2.imread(curFile + "/FakeMicroscopeImgs/background.png", cv2.IMREAD_GRAYSCALE)
         self.frame = cv2.resize(self.frame, dsize=(self.width * 2, self.height * 2), interpolation=cv2.INTER_NEAREST)
 
-        #normalize image
-        self.frame += np.min(self.frame)
-        self.frame = self.frame / np.max(self.frame)
-
-        #convert to 8 bit
-        self.frame *= 255
-        self.frame = self.frame.astype(np.uint8)
+        #write normalized image to file
+        cv2.imwrite(curFile + "/FakeMicroscopeImgs/background_normalized.png", self.frame)
 
         self.last_img = None
         self.last_stage_pos = None
@@ -103,7 +152,7 @@ class FakeCalCamera(Camera):
         #blur cover slip proportionally to how far stage_z is from 0 (being focused in the img plane)
         focusFactor = abs(stage_z - self.image_z) / 10
         if focusFactor == 0:
-            focusFactor = 0.1
+            focusFactor = 0.1 #prevent division by zero
 
         frame = cv2.GaussianBlur(np.array(frame), (63,63), focusFactor)
         frame = Image.fromarray(frame)
@@ -127,30 +176,37 @@ class FakeCalCamera(Camera):
     
 class FakePipette():
 
-    def __init__(self, manipulator:Manipulator, microscope_pixels_per_micron, stage_to_pipette=np.eye(4,4), pipetteAngle=np.pi/6):
+    def __init__(self, manipulator:Manipulator, microscope_pixels_per_micron, stage_to_pipette=np.eye(4,4), worldModel=None):
 
         stage_to_pipette = np.eye(4,4)
         self.rot_mat  = np.eye(4,4)
 
         stage_to_pipette = np.matmul(np.linalg.inv(self.rot_mat), stage_to_pipette)
 
-        
         self.manipulator = manipulator
         self.pixels_per_micron = microscope_pixels_per_micron
         self.stage_to_pipette = stage_to_pipette #homoegeneous transform matrix from stage to pipette
         self.pipette_to_stage = np.linalg.inv(self.stage_to_pipette)
+        self.worldModel:WorldModel = worldModel
 
         #setup pipette image (PIL b/c of easy pasting)
         curFile = str(Path(__file__).parent.absolute())
         self.pipetteImg = Image.open(curFile + "/FakeMicroscopeImgs/pipette.png").convert("L")
-        self.pipetteImg = self.pipetteImg.resize((self.pipetteImg.size[0] * 4, self.pipetteImg.size[1] * 2), Image.Resampling.BILINEAR)
-        filter = ImageEnhance.Brightness(self.pipetteImg)
-        self.pipetteImg = filter.enhance(1.2)
+        self.pipetteImg, self.alphaMask = self._processPipetteImage(self.pipetteImg)
+        self.pipetteImageBroken, self.alphaMaskBroken = self._processPipetteImage(Image.open(curFile + "/FakeMicroscopeImgs/pipette_crashed.png").convert("L"))
+
+        
+    
+    def _processPipetteImage(self, image):
+        image = image.resize((image.size[0] * 4, image.size[1] * 2), Image.Resampling.BILINEAR)
+        filter = ImageEnhance.Brightness(image)
+        image = filter.enhance(1.2)
 
         #create an alpha mask for the pipette (to make pipette see through)
-        filter = ImageEnhance.Brightness(self.pipetteImg)
-        self.alphaMask = filter.enhance(1.2)
-        
+        filter = ImageEnhance.Brightness(image)
+        alphaMask = filter.enhance(1.2)
+        return image, alphaMask
+
     def add_pipette_to_img(self, frame:Image, stagePos:list):
 
         # print(self.manipulator.position(), self.manipulator.raw_position())
@@ -169,6 +225,9 @@ class FakePipette():
         pipette_pos_stage_coords_h = np.matmul(self.pipette_to_stage, pipette_pos_h.T)
         pipette_pos_stage_coords = pipette_pos_stage_coords_h[0:3] / pipette_pos_stage_coords_h[3]
 
+        if not self.worldModel.isPipetteCrashed and pipette_pos_stage_coords[2] < 0:
+            self.worldModel.isPipetteCrashed = True
+
         #get pipette position in image coordinates
         pipette_pos_img_coords = pipette_pos_stage_coords * self.pixels_per_micron
 
@@ -181,12 +240,19 @@ class FakePipette():
         if focusFactor == 0:
             focusFactor = 0.1 #resolve divide by 0 error
 
+        if self.worldModel.isPipetteCrashed:
+            pipetteImg = self.pipetteImageBroken
+            alphaMask = self.alphaMaskBroken
+        else:
+            pipetteImg = self.pipetteImg
+            alphaMask = self.alphaMask
+
         #blur img
-        pipetteImg = cv2.GaussianBlur(np.array(self.pipetteImg), (63,63), focusFactor)
+        pipetteImg = cv2.GaussianBlur(np.array(pipetteImg), (63,63), focusFactor)
         pipetteImg = Image.fromarray(pipetteImg)
 
         #blur alpha channel
-        alphaMask = cv2.GaussianBlur(np.array(self.alphaMask), (63,63), focusFactor / 2)
+        alphaMask = cv2.GaussianBlur(np.array(alphaMask), (63,63), focusFactor / 2)
         alphaMask = alphaMask / 1.3
         alphaMask = Image.fromarray(alphaMask.astype(np.uint8))
 

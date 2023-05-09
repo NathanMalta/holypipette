@@ -37,29 +37,37 @@ class EPhysGraph(QWidget):
 
         self.squareWavePlot = PlotWidget()
         self.pressurePlot = PlotWidget()
+        self.resistancePlot = PlotWidget()
 
         #set background color of plots
         self.squareWavePlot.setBackground('w')
         self.pressurePlot.setBackground('w')
+        self.resistancePlot.setBackground('w')
 
         #set axis colors to black
         self.squareWavePlot.getAxis('left').setPen('k')
         self.squareWavePlot.getAxis('bottom').setPen('k')
         self.pressurePlot.getAxis('left').setPen('k')
         self.pressurePlot.getAxis('bottom').setPen('k')
+        self.resistancePlot.getAxis('left').setPen('k')
+        self.resistancePlot.getAxis('bottom').setPen('k')
 
         #set labels
         self.squareWavePlot.setLabel('left', "Voltage", units='V')
         self.squareWavePlot.setLabel('bottom', "Time", units='s')
         self.pressurePlot.setLabel('left', "Pressure", units='mbar')
         self.pressurePlot.setLabel('bottom', "Time", units='s')
+        self.resistancePlot.setLabel('left', "Resistance", units='Ohms')
+        self.resistancePlot.setLabel('bottom', "Time", units='s')
 
         self.pressureData = deque(maxlen=100)
+        self.resistanceData = deque(maxlen=100)
 
         #create a quarter layout for 4 graphs
         layout = QVBoxLayout()
         layout.addWidget(self.squareWavePlot)
         layout.addWidget(self.pressurePlot)
+        layout.addWidget(self.resistancePlot)
 
         self.setLayout(layout)
         
@@ -94,3 +102,8 @@ class EPhysGraph(QWidget):
         pressureX = [i * self.updateDt / 1000 for i in range(len(self.pressureData))]
         self.pressurePlot.clear()
         self.pressurePlot.plot(pressureX, self.pressureData, pen='k')
+
+        self.resistanceData.append(self.daq.getResistance())
+        resistanceX = [i * self.updateDt / 1000 for i in range(len(self.resistanceData))]
+        self.resistancePlot.clear()
+        self.resistancePlot.plot(resistanceX, self.resistanceData, pen='k')

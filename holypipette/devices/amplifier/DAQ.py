@@ -1,6 +1,7 @@
 import nidaqmx
 import nidaqmx.system
 import nidaqmx.constants
+from holypipette.devices.camera import WorldModel
 
 import numpy as np
 import math
@@ -116,8 +117,8 @@ class DAQ:
         return np.array([xdata, data])
 
 class FakeDAQ:
-    def __init__(self):
-        pass
+    def __init__(self, worldModel):
+        self.worldModel: WorldModel = worldModel
 
     def getDataFromSquareWave(self, wave_freq, samplesPerSec, dutyCycle, amplitude, recordingTime):
         #create a wave_freq Hz square wave
@@ -143,3 +144,6 @@ class FakeDAQ:
 
         data = np.array([xdata, data])
         return data
+
+    def getResistance(self):
+        return self.worldModel.getResistance()
