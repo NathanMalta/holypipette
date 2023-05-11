@@ -283,14 +283,18 @@ class TaskInterface(QtCore.QObject, LoggingObject):
 
         for one_task, one_argument in zip(task, argument):
             controller = one_task.__self__
-            if not isinstance(controller, TaskController):
-                raise TypeError('Can only execute methods of TaskController'
-                                'objects, but object for method {} is of type '
-                                '{}'.format(one_task.__name__, type(controller)))
-            success = self._execute_single_task(controller, one_task,
-                                                one_argument)
-            if not success:
-                return
+            if isinstance(controller, TaskController):
+                success = self._execute_single_task(controller, one_task,
+                                                    one_argument)
+                if not success:
+                    return
+                
+            else:
+                if one_argument == None:
+                    one_task()
+                else:
+                    one_task(one_argument)
+            
         self.task_finished.emit(0, controller)
 
     @QtCore.pyqtSlot(TaskController)

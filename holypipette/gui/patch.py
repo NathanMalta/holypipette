@@ -56,14 +56,7 @@ class PatchGui(ManipulatorGui):
         #                            self.patch_interface.patch_with_move)
         self.register_mouse_action(Qt.LeftButton, Qt.NoModifier,
                                    self.patch_interface.add_cell)
-        self.register_key_action(Qt.Key_B, None,
-                                 self.patch_interface.break_in)
-        self.register_key_action(Qt.Key_F2, None,
-                                 self.patch_interface.store_cleaning_position)
-        self.register_key_action(Qt.Key_F3, None,
-                                 self.patch_interface.store_rinsing_position)
-        self.register_key_action(Qt.Key_F4, None,
-                                 self.patch_interface.clean_pipette)
+
 
 
 class TrackingPatchGui(PatchGui):
@@ -77,10 +70,6 @@ class TrackingPatchGui(PatchGui):
 
     def register_commands(self):
         super(TrackingPatchGui, self).register_commands()
-        self.register_key_action(Qt.Key_F5, None,
-                                 self.patch_interface.sequential_patching)
-        self.register_key_action(Qt.Key_F8, None,
-                                 self.patch_interface.contact_detection)
 
 class ButtonTabWidget(QtWidgets.QWidget):
     def nothing(self):
@@ -177,8 +166,8 @@ class PatchButtons(ButtonTabWidget):
         self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
 
         #add a box for cal
-        buttonList = [['Calibrate Stage','Set Cell Plane'], ['Add Pipette Cal Point', 'Finish Pipette Cal'], ['Save Calibration', 'Recalibrate Pipette']]
-        cmds = [[self.pipette_interface.calibrate_stage, self.pipette_interface.set_floor], [self.pipette_interface.record_cal_point, self.pipette_interface.finish_calibration], [self.pipette_interface.write_calibration, self.pipette_interface.recalibrate_manipulator]]
+        buttonList = [['Set Cell Plane'], ['Replace Pipette']]
+        cmds = [[self.pipette_interface.set_floor], [self.pipette_interface.replaceTip]]
         self.addButtonList('calibration', layout, buttonList, cmds)
 
         #add a box for movement
@@ -187,8 +176,8 @@ class PatchButtons(ButtonTabWidget):
         self.addButtonList('movement', layout, buttonList, cmds)
 
         #add a box for patching cmds
-        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch', 'Continue'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
-        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch, self.do_nothing], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
+        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch'], ['Clean Pipette']]
+        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch], [self.pipette_interface.clean_pipette]]
         self.addButtonList('patching', layout, buttonList, cmds)
         
         self.setLayout(layout)

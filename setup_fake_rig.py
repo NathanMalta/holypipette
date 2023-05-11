@@ -18,7 +18,8 @@ stage = ManipulatorUnit(controller, [1, 2])
 pipetteManip.x = [200, 300, 400] # start with pipette in frame
 controller.x = [0, 0, 0]
 
-worldModel = WorldModel()
+pressure = FakePressureController()
+worldModel = WorldModel(pipette=pipetteManip, pressure=pressure)
 camera = FakeCalCamera(stageManip=controller, pipetteManip=pipetteManip, image_z=0, worldModel=worldModel)
 
 microscope = Microscope(controller, 3)
@@ -27,5 +28,4 @@ microscope.up_direction = 1.0
 unit = ManipulatorUnit(pipetteManip, [1, 2, 3])
 
 daq = FakeDAQ(worldModel=worldModel)
-amplifier = FakeAmplifier()
-pressure = FakePressureController()
+amplifier = FakeAmplifier(worldModel=worldModel)

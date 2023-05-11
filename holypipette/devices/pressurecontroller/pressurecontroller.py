@@ -2,7 +2,7 @@
 A general pressure controller class
 '''
 import collections
-from time import time
+import time
 
 from holypipette.controller.base import TaskController
 
@@ -38,11 +38,12 @@ class PressureController(TaskController):
         '''
         Makes a ramp of pressure
         '''
-        t0 = time()
+        t0 = time.time()
         t = t0
         while t-t0<duration:
             self.set_pressure(amplitude*(t-t0)/duration)
-            t = time()
+            time.sleep(0.05)
+            t = time.time()
         self.set_pressure(0.)
 
 

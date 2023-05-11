@@ -1,4 +1,5 @@
 from holypipette.devices.manipulator import Manipulator, FakeManipulator
+from holypipette.devices.pressurecontroller import PressureController
 from .camera import Camera
 import numpy as np
 import cv2
@@ -7,28 +8,109 @@ import time
 import math
 
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
+from enum import Enum
+
+class PipetteState(Enum):
+    TIP_NORMAL = 0
+    TIP_BROKEN = 1
+    TIP_SEALED = 2
+    TIP_CLOGGED = 3
+    TIP_BROKEN_IN = 4
 
 
 class WorldModel():
-    def __init__(self, pixels_per_micron=1, pipette_img_size=[1016, 354]):
+    def __init__(self, pipette: Manipulator, pressure: PressureController, pixels_per_micron=1, pipette_img_size=[1016, 354]):
+        self.pipette = pipette
+        self.pressure = pressure
+        self.pixels_per_micron = pixels_per_micron
+        self.pipette_img_size = pipette_img_size
+
         # load cell annotations
         curFile = str(Path(__file__).parent.absolute())
         self.annotations = cv2.imread(curFile + "/FakeMicroscopeImgs/annotation.png", cv2.IMREAD_GRAYSCALE)
-        self.pipette_img_size = pipette_img_size
-        self.pixels_per_micron = pixels_per_micron
+        self.pipette_state = PipetteState.TIP_NORMAL
 
-        self.isPipetteCrashed = False
-        self.normalResistance = np.random.randint(4e6, 7e6) #4-7 Mohm
-        self.crashedResistance = np.random.randint(0.3e6, 2e6) #0.3-2 Mohm
+        #setup pipette contants
+        self._setupPipetteResistances()
         self.pipetteResistanceNoise = 0.1e6 #0.1 Mohm
 
+        self.nearCellAddition = 0
+    
+    def _setupPipetteResistances(self):
+        self.normalResistance = np.random.randint(4e6, 7e6) #4-7 Mohm
+        self.crashedResistance = np.random.randint(0.3e6, 2e6) #0.3-2 Mohm
+        self.sealedResistance = np.random.randint(1e9, 2.5e9)
+
+    def isTipBroken(self):
+        return self.pipette_state == PipetteState.TIP_BROKEN
+        
+    def isSealed(self):
+        return self.pipette_state == PipetteState.TIP_SEALED
+        
+    def replacePipette(self):
+        self._setupPipetteResistances() #new pipette, new resistances!
+        self.pipette_state = PipetteState.TIP_NORMAL
+    
+    def breakPipette(self):
+        self.pipette_state = PipetteState.TIP_BROKEN
+
+    def cleanPipette(self):
+        if self.pipette_state == PipetteState.TIP_CLOGGED:
+            self.pipette_state = PipetteState.TIP_NORMAL
+
     def getResistance(self):
-        if self.isPipetteCrashed:
+        res = self._standardPipetteResistance()
+
+        if self.pipette_state == PipetteState.TIP_BROKEN or self.pipette_state == PipetteState.TIP_CLOGGED:
+            return res
+        
+        pipettePos = self.pipette.position()
+        distFromSlip = pipettePos[2]
+
+        if self.pipette_state == PipetteState.TIP_SEALED or self.pipette_state == PipetteState.TIP_BROKEN_IN:
+            if distFromSlip > 20 or self.pressure.get_pressure() > 0:
+                #we're too far, revert to non-gigasealed
+                self.pipette_state = PipetteState.TIP_CLOGGED
+            
+            if self.pressure.get_pressure() < -190 and self.pipette_state == PipetteState.TIP_SEALED:
+                #break in
+                self.pipette_state = PipetteState.TIP_BROKEN_IN
+
+            return res
+
+        if distFromSlip > 20 or 0 > distFromSlip:
+            #we're not in the position range for patching (either broken or too far away)
+            return res
+        
+        #add a bit of resistance if we're close to a cell
+        if self._isCellAtPos(pipettePos[0], pipettePos[1]):
+            res += 0.1e6 * (20 - distFromSlip)
+
+            if self.pressure.get_pressure() == 0:
+                #gigaseal!
+                self.pipette_state = PipetteState.TIP_SEALED
+
+        return res
+        
+    def _standardPipetteResistance(self):
+        '''The resistance of the pipette without any cells
+        '''
+        if self.isTipBroken():
             return self.crashedResistance + np.random.random() * self.pipetteResistanceNoise
+        elif self.isSealed():
+            return self.sealedResistance + np.random.random() * self.pipetteResistanceNoise
+        elif self.pipette_state == PipetteState.TIP_CLOGGED:
+            return self.normalResistance * 1.25 + np.random.random() * self.pipetteResistanceNoise
         else:
             return self.normalResistance + np.random.random() * self.pipetteResistanceNoise
 
+
     def _isCellAtPos(self, x, y):
+
+        #image indexing must be ints
+        x = int(x)
+        y = int(y)
+
         if self.annotations[y, x] > 0:
             return True
         else:
@@ -225,8 +307,8 @@ class FakePipette():
         pipette_pos_stage_coords_h = np.matmul(self.pipette_to_stage, pipette_pos_h.T)
         pipette_pos_stage_coords = pipette_pos_stage_coords_h[0:3] / pipette_pos_stage_coords_h[3]
 
-        if not self.worldModel.isPipetteCrashed and pipette_pos_stage_coords[2] < 0:
-            self.worldModel.isPipetteCrashed = True
+        if not self.worldModel.isTipBroken() and pipette_pos_stage_coords[2] < 0:
+            self.worldModel.breakPipette()
 
         #get pipette position in image coordinates
         pipette_pos_img_coords = pipette_pos_stage_coords * self.pixels_per_micron
@@ -240,7 +322,7 @@ class FakePipette():
         if focusFactor == 0:
             focusFactor = 0.1 #resolve divide by 0 error
 
-        if self.worldModel.isPipetteCrashed:
+        if self.worldModel.isTipBroken():
             pipetteImg = self.pipetteImageBroken
             alphaMask = self.alphaMaskBroken
         else:

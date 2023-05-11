@@ -14,7 +14,7 @@ console_logger()  # Log to the standard console as well
 
 app = QtWidgets.QApplication(sys.argv)
 
-pipette_controller = PipetteInterface(stage, microscope, camera, unit)
+pipette_controller = PipetteInterface(stage, microscope, camera, unit, worldModel)
 patch_controller = AutoPatchInterface(amplifier, pressure, pipette_controller)
 gui = PatchGui(camera, pipette_controller, patch_controller)
 graphs = EPhysGraph(daq, pressure)

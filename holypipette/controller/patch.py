@@ -4,6 +4,7 @@ import numpy as np
 from holypipette.devices.amplifier.amplifier import Amplifier
 from holypipette.devices.manipulator.calibratedunit import CalibratedUnit
 from holypipette.devices.manipulator.microscope import Microscope
+from holypipette.devices.amplifier.DAQ import DAQ
 
 from holypipette.config import Config
 
@@ -120,7 +121,7 @@ class AutoPatcher(TaskController):
 
 
 
-            pipette_setpoint = np.array([0, 0, self.microscope.position() + cell_distance])
+            pipette_setpoint = np.array([0, 0, self.microscope.position() - cell_distance])
             self.calibrated_unit.safe_move(pipette_setpoint)
             self.calibrated_unit.wait_until_still()
             
@@ -142,13 +143,15 @@ class AutoPatcher(TaskController):
             for _ in range(int(self.config.max_distance)):  # move 15 um down
                 # move by 1 um down
                 # Cleaner: use reference relative move
-                self.calibrated_unit.relative_move(1, axis=2)  # *calibrated_unit.up_position[2]
+                self.calibrated_unit.relative_move(-1, axis=2)  # *calibrated_unit.up_position[2]
                 self.abort_if_requested()
                 self.calibrated_unit.wait_until_still(2)
                 self.sleep(1)
                 self.amplifier.voltage_clamp()
                 R = self.amplifier.resistance()
                 self.info("R = " + str(self.amplifier.resistance()/1e6))
+
+                print(R, oldR, self.config.cell_R_increase)
                 if R > oldR * (1 + self.config.cell_R_increase):  # R increases: near cell?
                     # Release pressure
                     self.info("Releasing pressure")
@@ -164,6 +167,7 @@ class AutoPatcher(TaskController):
                         R = self.amplifier.resistance()
                         while (R < self.config.gigaseal_R) | (t - t0 < self.config.seal_min_time):
                             # Wait at least 15s and until we get a Gigaseal
+                            time.sleep(0.25)
                             t = time.time()
                             if t - t0 < self.config.Vramp_duration:
                                 # Ramp to -70 mV in 10 s (default)
@@ -175,8 +179,8 @@ class AutoPatcher(TaskController):
                             R = self.amplifier.resistance()
                         success = True
                         break
-            self.pressure.set_pressure(0)
             if not success:
+                self.pressure.set_pressure(20)
                 raise AutopatchError("Seal unsuccessful")
 
             self.info("Seal successful, R = " + str(self.amplifier.resistance()/1e6))

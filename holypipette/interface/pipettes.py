@@ -7,6 +7,7 @@ from PyQt5 import QtCore
 
 from holypipette.interface import TaskInterface, command, blocking_command
 from holypipette.devices.manipulator.calibratedunit import CalibratedUnit, CalibratedStage, CalibrationConfig
+from holypipette.devices.camera import WorldModel
 import time
 
 class PipetteInterface(TaskInterface):
@@ -14,7 +15,7 @@ class PipetteInterface(TaskInterface):
     Controller for the stage, the microscope, a pipette, and the cell sorter.
     '''
 
-    def __init__(self, stage, microscope, camera, unit):
+    def __init__(self, stage, microscope, camera, unit, worldModel: WorldModel):
         super(PipetteInterface, self).__init__()
         self.microscope = microscope
         self.camera = camera
@@ -27,6 +28,8 @@ class PipetteInterface(TaskInterface):
                                                 microscope,
                                                 camera,
                                                 config=self.calibration_config)
+        
+        self.worldModel = worldModel
 
         self.calibrated_unit.load_configuration('M')
         self.calibrated_stage.load_configuration('S')
@@ -47,7 +50,40 @@ class PipetteInterface(TaskInterface):
              default_arg=10)
     def record_cal_point(self, none):
         self.calibrated_unit.record_cal_point()
+
+    @blocking_command(category='Manipulators',
+             description='Replace Tip of the pipette',
+             task_description='Replace Pipette')
+    def replaceTip(self):
+        self.execute([self._replaceTip])
+
+    def _replaceTip(self):
+        currPos = self.calibrated_unit.position()
+        self.calibrated_unit.relative_move(1000, 2) #move the tip way up to simulate what'd you do replacing it
+        self.calibrated_unit.wait_until_still()
+        self.worldModel.replacePipette()
+        if currPos[2] < 0:
+            currPos[2] = 0 #make sure we don't crash on the way down
+        self.calibrated_unit.absolute_move(currPos) #move it back to where it was
+
     
+    @blocking_command(category='Manipulators',
+            description='Replace Tip of the pipette',
+            task_description='Replace Pipette')
+    def clean_pipette(self):
+        self.execute([self._clean_pipette])
+
+    def _clean_pipette(self):
+        currPos = self.calibrated_unit.position()
+        self.calibrated_unit.relative_move(1000, 2) #move the tip way up to simulate what'd you do replacing it
+        self.calibrated_unit.wait_until_still()
+        self.worldModel.cleanPipette()
+        if currPos[2] < 0:
+            currPos[2] = 0 #make sure we don't crash on the way down
+        self.calibrated_unit.absolute_move(currPos) #move it back to where it was
+
+    
+
     @command(category='Manipulators',
              description='Finish calibration',
              default_arg=10)

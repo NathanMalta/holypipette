@@ -129,24 +129,6 @@ class AutoPatchInterface(TaskInterface):
         time.sleep(2)
         self.cells_to_patch = self.cells_to_patch[1:]
         
-    @command(category='Patch',
-             description='Store the position of the washing bath',
-             success_message='Cleaning path position stored')
-    def store_cleaning_position(self):
-        self.current_autopatcher.cleaning_bath_position = self.pipette_controller.calibrated_unit.position()
-
-    @command(category='Patch',
-             description='Store the position of the rinsing bath',
-             success_message='Rinsing bath position stored')
-    def store_rinsing_position(self):
-        self.current_autopatcher.rinsing_bath_position = self.pipette_controller.calibrated_unit.position()
-
-    @blocking_command(category='Patch',
-                      description='Clean the pipette (wash and rinse)',
-                      task_description='Cleaning the pipette')
-    def clean_pipette(self):
-        self.execute(self.current_autopatcher.clean_pipette)
-
     @blocking_command(category='Patch',
                       description='Sequential patching and cleaning for multiple cells',
                       task_description='Sequential patch clamping')
