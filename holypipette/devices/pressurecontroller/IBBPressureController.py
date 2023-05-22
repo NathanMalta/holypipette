@@ -18,7 +18,7 @@ class IBBPressureController(PressureController):
     validProducts = ["USB Serial"] #TODO: move to a constants or json file?
     validVIDs = [0x1a86, 0x403]
                     
-    nativePerMbar = 2.925 # The number of native pressure transucer units from the DAC (0 to 4095) in a millibar of pressure (-700 to 700)
+    nativePerMbar = 0.2925 # The number of native pressure transucer units from the DAC (0 to 4095) in a millibar of pressure (-700 to 700)
     nativeZero = 2048 # The native units at a 0 pressure (y-intercept)
 
     serialCmdTimeout = 1 # (in sec) max time allowed between sending a serial command and expecting a response

@@ -186,8 +186,8 @@ class PatchButtons(ButtonTabWidget):
         self.addButtonList('calibration', layout, buttonList, cmds)
 
         #add a box for movement
-        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Calibrate Cell Sorter', 'Cell Sorter to Cell'], ['Center Pipette']]
-        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.pipette_interface.calibrate_cell_sorter, self.patch_interface.move_cellsorter_to_cell], [self.pipette_interface.center_pipette]]
+        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Cell Sorter to Cell'], ['Center Pipette']]
+        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.patch_interface.move_cellsorter_to_cell], [self.pipette_interface.center_pipette]]
         self.addButtonList('movement', layout, buttonList, cmds)
 
         #add a box for patching cmds

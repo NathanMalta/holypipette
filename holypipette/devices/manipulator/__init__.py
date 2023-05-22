@@ -3,7 +3,7 @@ from .manipulator import *
 from .fakemanipulator import *
 from .sensapexWrapper import *
 from .manipulatorunit import *
-from .scientificaSerial import ScientificaSerial
+from .scientificaSerial import ScientificaSerialEncoder, ScientificaSerialNoEncoder
 from .calibratedunit import *
 from .microscope import *
 import warnings

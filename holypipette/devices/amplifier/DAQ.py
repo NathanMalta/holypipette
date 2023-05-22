@@ -3,6 +3,7 @@ import nidaqmx.system
 import nidaqmx.constants
 
 import numpy as np
+import scipy.signal as signal
 import math
 
 __all__ = ['DAQ', 'FakeDAQ']
@@ -14,6 +15,7 @@ class DAQ:
 
         self.readChannel = readChannel
         self.cmdChannel = cmdChannel
+        self.latestResistance = None
 
         #read constants
 
@@ -22,7 +24,7 @@ class DAQ:
     def _readAnalogInput(self, samplesPerSec, recordingTime):
         numSamples = int(samplesPerSec * recordingTime)
         with nidaqmx.Task() as task:
-            task.ai_channels.add_ai_voltage_chan(f'{self.readDev}/{self.readChannel}', max_val=10, min_val=0)
+            task.ai_channels.add_ai_voltage_chan(f'{self.readDev}/{self.readChannel}', max_val=10, min_val=0, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
             task.timing.cfg_samp_clk_timing(samplesPerSec, sample_mode=nidaqmx.constants.AcquisitionType.FINITE, samps_per_chan=numSamples)
             # task.triggers.reference_trigger.cfg_anlg_edge_ref_trig(f'{self.readDev}/{self.readChannel}', pretrigger_samples = 10, trigger_slope=nidaqmx.constants.Slope.RISING, trigger_level=0.2)
             data = task.read(number_of_samples_per_channel=numSamples, timeout=10)
@@ -75,13 +77,39 @@ class DAQ:
         sendTask.stop()
         sendTask.close()
         
-        data, resistance = self._triggerSquareWave(1e-9, data, amplitude * 0.02)
+        data, self.latestResistance = self._triggerSquareWave(150e-12, data, amplitude * 0.02)
         triggeredSamples = data.shape[0]
         xdata = np.linspace(0, triggeredSamples / samplesPerSec, triggeredSamples, dtype=float)
 
-        return np.array([xdata, data]), resistance
+        return np.array([xdata, data]), self.latestResistance
+    
+    def resistance(self):
+        return self.latestResistance
+
+    def _filter60Hz(self, data):
+        samplesPerSec = 50000
+        #60 hz filter
+        b, a = signal.iirnotch(48.828125, Q=30, fs=samplesPerSec)
+        data = signal.filtfilt(b, a, data, irlen=1000)
+        return data
+
     
     def _triggerSquareWave(self, triggerVal, data, cmdVoltage):
+        # #add 60 hz filter
+        # data = self._filter60Hz(data)
+        # # return data, None #completely disable triggering
+        
+        # #print most prominant frequency in the data
+        # freqs, psd = signal.welch(data, fs=50000, nperseg=2048)
+        
+        # # #get 10 frequencies with the highest powers
+        # freqs = freqs[np.argsort(psd)][-10:]
+        # psd = psd[np.argsort(psd)][-10:]
+
+        # print(freqs)
+
+        # return data, None
+
         try:
             #split data into high and low wave
             mean = np.mean(data)
@@ -106,6 +134,12 @@ class DAQ:
             #find second rising edge location
             secondFallingEdge = np.where(shiftedData < triggerVal)[0][0]
             
+            #find peak to peak spread on high side
+            highPeak = np.max(shiftedData[5:secondFallingEdge-5:])
+            lowPeak = np.min(shiftedData[5:secondFallingEdge-5:])
+            peakToPeak = highPeak - lowPeak
+            # print(f'Peak to peak: {peakToPeak * 1e12} ({highPeak * 1e12} - {lowPeak * 1e12})')
+
             #find second rising edge after falling edge
             secondRisingEdge = np.where(shiftedData[secondFallingEdge:] > triggerVal)[0][0] + secondFallingEdge
             shiftedData = shiftedData[:secondRisingEdge]
@@ -113,7 +147,7 @@ class DAQ:
             #calculate resistance
             resistance = cmdVoltage / (highAvg - lowAvg)
 
-            return shiftedData + lowAvg, resistance
+            return shiftedData, resistance
         except:
             #we got an invalid square wave
             return data, None

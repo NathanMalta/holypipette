@@ -54,13 +54,13 @@ class AutoPatchInterface(TaskInterface):
     '''
     A class to run automatic patch-clamp
     '''
-    def __init__(self, amplifier, pressure, pipette_interface):
+    def __init__(self, amplifier, daq, pressure, pipette_interface):
         super(AutoPatchInterface, self).__init__()
         self.config = PatchConfig(name='Patch')
         self.amplifier = amplifier
         self.pressure = pressure
         self.pipette_controller = pipette_interface
-        autopatcher = AutoPatcher(amplifier, pressure, self.pipette_controller.calibrated_unit,
+        autopatcher = AutoPatcher(amplifier, daq, pressure, self.pipette_controller.calibrated_unit,
                                     self.pipette_controller.calibrated_unit.microscope,
                                     calibrated_stage=self.pipette_controller.calibrated_stage,
                                     config=self.config)

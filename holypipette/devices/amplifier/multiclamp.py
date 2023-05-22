@@ -412,18 +412,12 @@ class MultiClampChannel(Amplifier):
         self.switch_holding(True)
         self.set_holding(0.)
 
-        # Enable resistance metering
-        self.switch_resistance_meter(True)
 
     def resistance(self):
         '''
         Returns resistance
         '''
-        # Get resistance (assuming resistance metering is on)
-        if not self.resistance_meter_state():
-            self.switch_resistance_meter(True)
-            time.sleep(1.5) #resistance meter takes time to stabilize
-        return self.get_meter_value()
+        raise RuntimeError('Resistance not implemented for MultiClamp -- Use DAQ resistance instead.')
 
     def stop_patch(self):
         '''

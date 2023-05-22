@@ -189,7 +189,7 @@ class CalibratedUnit(ManipulatorUnit):
             pos_pixels = self.um_to_pixels(pos_um) + self.stage.reference_position()
         return pos_pixels # position vector (pixels) in camera system
 
-    def reference_move(self, pos_pixels, safe = False):
+    def reference_move(self, pos_pixels, yolo_correction=True):
         '''
         Moves the unit to position pos_pixels in reference camera system, without moving the stage.
 
@@ -210,6 +210,9 @@ class CalibratedUnit(ManipulatorUnit):
         self.wait_until_still()
 
         if isinstance(self, CalibratedStage) or isinstance(self, FixedStage):
+            return
+        
+        if not yolo_correction:
             return
         
         emperical_poses = []
@@ -257,7 +260,7 @@ class CalibratedUnit(ManipulatorUnit):
         print('Autofocusing pipette')
         self.pipetteFocusHelper.focus()
 
-    def safe_move(self, r, withdraw = 0., recalibrate = False):
+    def safe_move(self, r, yolo_correction=True):
         '''
         Moves the device to position x (an XYZ vector) in a way that minimizes
         interaction with tissue.
@@ -279,7 +282,7 @@ class CalibratedUnit(ManipulatorUnit):
         r = np.array(r)
         r = r + np.array([self.camera.width // 2, self.camera.height // 2, 0])
 
-        self.reference_move(r) # Or relative move in manipulator coordinates, first axis (faster)
+        self.reference_move(r, yolo_correction) # Or relative move in manipulator coordinates, first axis (faster)
 
 
     def pixel_per_um(self, M=None):
@@ -447,7 +450,7 @@ class CalibratedStage(CalibratedUnit):
 
         return posDelta
 
-    def reference_move(self, r):
+    def reference_move(self, r, yolo_correction=None):
         if len(r)==2: # Third coordinate is actually not useful
             r3D = zeros(3)
             r3D[:2] = r
