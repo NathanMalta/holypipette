@@ -186,13 +186,13 @@ class PatchButtons(ButtonTabWidget):
         self.addButtonList('calibration', layout, buttonList, cmds)
 
         #add a box for movement
-        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Cell Sorter to Cell'], ['Center Pipette']]
-        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.patch_interface.move_cellsorter_to_cell], [self.pipette_interface.center_pipette]]
+        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Center Pipette']]
+        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.pipette_interface.center_pipette]]
         self.addButtonList('movement', layout, buttonList, cmds)
 
         #add a box for patching cmds
-        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch', 'Continue'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
-        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch, self.do_nothing], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
+        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch', 'Break In'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
+        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch, self.patch_interface.break_in], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
         self.addButtonList('patching', layout, buttonList, cmds)
         
         self.setLayout(layout)

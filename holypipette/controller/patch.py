@@ -40,13 +40,13 @@ class AutoPatcher(TaskController):
         Breaks in. The pipette must be in cell-attached mode
         '''
         self.info("Breaking in")
-        R = self.amplifier.resistance()
-        if R < self.config.gigaseal_R:
-            raise AutopatchError("Seal lost")
+        R = self.daq.resistance()
+        # if R is not None and R < self.config.gigaseal_R:
+        #     raise AutopatchError("Seal lost")
 
         pressure = 0
         trials = 0
-        while self.amplifier.resistance() > self.config.max_cell_R:  # Success when resistance goes below 300 MOhm
+        while R is None or self.daq.resistance() > self.config.max_cell_R:  # Success when resistance goes below 300 MOhm
             trials+=1
             self.debug('Trial: '+str(trials))
             pressure += self.config.pressure_ramp_increment
@@ -58,7 +58,7 @@ class AutoPatcher(TaskController):
             self.pressure.ramp(amplitude=pressure, duration=self.config.pressure_ramp_duration)
             self.sleep(1.3)
 
-        self.info("Successful break-in, R = " + str(self.amplifier.resistance() / 1e6))
+        self.info("Successful break-in, R = " + str(self.daq.resistance() / 1e6))
 
     def _verify_resistance(self):
         R = self.daq.resistance()
@@ -84,9 +84,6 @@ class AutoPatcher(TaskController):
         #criteria 2: there must be an increase of at least 0.3 mega ohms
         r_delta = lastResDeque[2] - lastResDeque[0]
         return cellThreshold <= r_delta
-        
-
-        
 
     def patch(self, cell_pos=None):
         '''
@@ -190,22 +187,20 @@ class AutoPatcher(TaskController):
 
 
         #phase 2: attempt to form a gigaseal
-
+        lastResDeque = collections.deque(maxlen=3)
         # Release pressure
         self.info("Cell Detected, Lowering pressure")
         currPressure = 0
+        self.pressure.set_pressure(currPressure)
+        self.amplifier.set_holding(self.config.Vramp_amplitude)
         
-        self.sleep(5)
+        self.sleep(10)
         t0 = time.time()
         while R < self.config.gigaseal_R:
             t = time.time()
             if currPressure < -40:
                 currPressure = 0
             self.pressure.set_pressure(currPressure)
-
-            if t - t0 < self.config.Vramp_duration: #TODO what is this?
-                # Ramp to -70 mV in 10 s (default)
-                self.amplifier.set_holding(self.config.Vramp_amplitude * (t - t0) / self.config.Vramp_duration)
                 
             if t - t0 >= self.config.seal_deadline:
                 # Time timeout for gigaseal
@@ -214,13 +209,14 @@ class AutoPatcher(TaskController):
                 raise AutopatchError("Seal unsuccessful")
             
             #did we reach gigaseal?
-            if R > self.config.gigaseal_R:
-                R = self.daq.resistance()
+            R = self.daq.resistance()
+            lastResDeque.append(R)
+            if R > self.config.gigaseal_R or len(lastResDeque) == 3 and all([lastResDeque == None for x in lastResDeque]):
                 success = True
                 break
             
             #else, wait a bit and lower pressure
-            self.sleep(2)
+            self.sleep(5)
             currPressure -= 10
 
         if not success:
@@ -288,112 +284,3 @@ class AutoPatcher(TaskController):
             
         finally:
             pass
-
-    def sequential_patching(self):
-        from holypipette.gui import movingList
-        if self.cleaning_bath_position is None:
-            raise ValueError('Cleaning bath position has not been set')
-        if self.rinsing_bath_position is None:
-            raise ValueError('Rinsing bath position has not been set')
-        try:
-            length = len(movingList.moveList)
-            for iteration in range (length):
-                self.amplifier.start_patch()
-                # Pressure level 1
-                self.pressure.set_pressure(self.config.pressure_near)
-                # Move pipette to target
-                move_position = movingList.moveList[iteration]
-                currentPosition = move_position
-                self.calibrated_unit.safe_move(np.array([move_position[0], move_position[1],self.microscope.position()]) + self.microscope.up_direction * np.array([0, 0, 1.]) * self.config.cell_distance, recalibrate=True)
-                self.calibrated_unit.wait_until_still()
-                self.amplifier.auto_pipette_offset()
-                self.sleep(4.)
-                R = self.amplifier.resistance()
-                self.debug("Resistance:" + str(R / 1e6))
-                if R < self.config.min_R:
-                    raise AutopatchError("Resistance is too low (broken tip?)")
-                elif R > self.config.max_R:
-                    raise AutopatchError("Resistance is too high (obstructed?)")
-
-                # Check resistance again
-                # oldR = R
-                # R = self.amplifier.resistance()
-                # if abs(R - oldR) > self.config.max_R_increase:
-                #    raise AutopatchError("Pipette is obstructed; R = " + str(R/1e6))
-
-                # Pipette offset
-                self.amplifier.auto_pipette_offset()
-                self.sleep(2)  # why?
-
-                # Approach and make the seal
-                self.info("Approaching the cell")
-                success = False
-                oldR = R
-                for _ in range(self.config.max_distance):  # move 15 um down
-                    # move by 1 um down
-                    # Cleaner: use reference relative move
-                    self.calibrated_unit.relative_move(1, axis=2)  # *calibrated_unit.up_position[2]
-                    self.abort_if_requested()
-                    self.calibrated_unit.wait_until_still(2)
-                    try:
-                        move_position = movingList.moveList[iteration]
-                    except:
-                        move_position = currentPosition
-
-                    # sum of variation in both x and y > 5 pixel --> compensation
-                    if (len(move_position)>0) & (abs(currentPosition.flatten().sum() - move_position.flatten().sum()) > 5):
-                        currentPosition = move_position
-                        self.calibrated_unit.safe_move(np.array([move_position[0], move_position[1],self.microscope.position()]) + self.microscope.up_direction * np.array([0, 0, 1.]) * self.config.cell_distance, recalibrate=True)
-                        self.calibrated_unit.wait_until_still()
-
-                    self.sleep(1)
-                    R = self.amplifier.resistance()
-                    self.info("R = " + str(self.amplifier.resistance() / 1e6))
-                    if R > oldR * (1 + self.config.cell_R_increase):  # R increases: near cell?
-                        # Release pressure
-                        self.info("Releasing pressure")
-                        self.pressure.set_pressure(0)
-                        self.sleep(10)
-                        if R > oldR * (1 + self.config.cell_R_increase):
-                            # Still higher, we are near the cell
-                            self.debug("Sealing, R = " + str(self.amplifier.resistance() / 1e6))
-                            self.pressure.set_pressure(self.config.pressure_sealing)
-                            t0 = time.time()
-                            t = t0
-                            R = self.amplifier.resistance()
-                            while (R < self.config.gigaseal_R) | (t - t0 < self.config.seal_min_time):
-                                # Wait at least 15s and until we get a Gigaseal
-                                t = time.time()
-                                if t - t0 < self.config.Vramp_duration:
-                                    # Ramp to -70 mV in 10 s (default)
-                                    self.amplifier.set_holding(
-                                        self.config.Vramp_amplitude * (t - t0) / self.config.Vramp_duration)
-                                if t - t0 >= self.config.seal_deadline:
-                                    # No seal in 90 s
-                                    self.amplifier.stop_patch()
-                                    raise AutopatchError("Seal unsuccessful")
-                                R = self.amplifier.resistance()
-                            success = True
-                            break
-                self.pressure.set_pressure(0)
-                if not success:
-                    raise AutopatchError("Seal unsuccessful")
-                self.info("Seal successful, R = " + str(self.amplifier.resistance() / 1e6))
-                self.break_in()
-                self.amplifier.stop_patch()
-                self.pressure.set_pressure(self.config.pressure_near)
-                self.clean_pipette()
-
-        finally:
-            self.pressure.set_pressure(self.config.pressure_near)
-
-    def contact_detection(self):
-        from holypipette.gui import movingList
-        try:
-            movingList.contact = False
-            while movingList.contact == False:
-                self.calibrated_unit.relative_move(1, axis=2)
-            self.contact_position = self.calibrated_unit.position()
-        finally:
-            print("Detection Finished")
-            movingList.contact = True

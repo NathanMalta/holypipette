@@ -98,7 +98,7 @@ class DAQ:
     def _triggerSquareWave(self, triggerVal, data, cmdVoltage):
         # #add 60 hz filter
         # data = self._filter60Hz(data)
-        # # return data, None #completely disable triggering
+        # return data, None #completely disable triggering
         
         # #print most prominant frequency in the data
         # freqs, psd = signal.welch(data, fs=50000, nperseg=2048)

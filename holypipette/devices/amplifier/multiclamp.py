@@ -429,8 +429,6 @@ class MultiClampChannel(Amplifier):
         self.switch_holding(False)
         # Disable pulses
         self.switch_pulses(False)
-        # Mode I=0
-        self.null_current()
 
     # **** Signal settings ****
 
