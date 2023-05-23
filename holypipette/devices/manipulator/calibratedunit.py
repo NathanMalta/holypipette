@@ -99,6 +99,7 @@ class CalibratedUnit(ManipulatorUnit):
         self.camera = camera
 
         self.calibrated = False
+        self.must_be_recalibrated = False
         self.up_direction = [-1 for _ in range(len(unit.axes))] # Default up direction, determined during calibration
 
         self.pipette_position = None
@@ -251,6 +252,9 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         if not self.calibrated:
             raise CalibrationError('Pipette not calibrated')
+        if self.must_be_recalibrated:
+            raise CalibrationError('Pipette offsets must be recalibrated')
+        
         self.microscope.absolute_move(self.reference_position()[2])
         self.microscope.wait_until_still()
 
@@ -277,7 +281,9 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         if not self.calibrated:
             raise CalibrationError
-        
+        if self.must_be_recalibrated:
+            raise CalibrationError('Pipette offsets must be recalibrated')
+
         # r from pyQt has origin at the center of the image, move origin to the top left corner (as expected by calibration)
         r = np.array(r)
         r = r + np.array([self.camera.width // 2, self.camera.height // 2, 0])
@@ -342,11 +348,15 @@ class CalibratedUnit(ManipulatorUnit):
         print('r0_inv: ', self.r0_inv)
 
         self.calibrated = True
+        self.must_be_recalibrated = False
     
 
     def recalibrate_pipette(self):
         '''recalibrate pipette offset while keeping matrix
         '''
+        if self.M is None or self.Minv is None:
+            raise Exception("initial calibration required for single point recalibration!")
+        
         print('recalculating piptte offsets...')
         emperical_poses = []
         for i in range(10):
@@ -380,6 +390,8 @@ class CalibratedUnit(ManipulatorUnit):
 
         #get r0_inv
         self.r0_inv = homogenous_mat_inv[0:3, 3]
+        self.calibrated = True
+        self.must_be_recalibrated = False
 
         print('New offsets: ', self.r0, self.r0_inv)
 
@@ -401,8 +413,11 @@ class CalibratedUnit(ManipulatorUnit):
         '''
         self.M = config.get('M', self.M)
         self.Minv = pinv(self.M)
+        self.r0 = np.zeros(self.M.shape[0])
+        self.r0_inv = np.zeros(self.M.shape[0])
+        if self.M.shape[0] == 3:
+            self.must_be_recalibrated = True #the pipette offsets need to be recalibrated upon reboot.
         self.calibrated = True
-        self.r0 = config.get('r0', self.r0)
 
 class CalibratedStage(CalibratedUnit):
     '''
@@ -468,6 +483,9 @@ class CalibratedStage(CalibratedUnit):
         '''
         if not self.calibrated:
             raise CalibrationError
+        if self.must_be_recalibrated:
+            raise CalibrationError('Pipette offsets must be recalibrated')
+
             
         pos_microns = dot(self.Minv, pos_pix)
         self.relative_move(pos_microns)
@@ -498,6 +516,7 @@ class CalibratedStage(CalibratedUnit):
         self.M = mat[0:2, 0:2]
         self.Minv = mat_inv[0:2, 0:2]
         self.calibrated = True
+        self.must_be_recalibrated = False
 
         self.info('Stage calibration done')
 

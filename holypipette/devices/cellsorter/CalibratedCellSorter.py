@@ -97,13 +97,14 @@ class CalibratedCellSorter(TaskController):
             raise Exception("Stage is not calibrated")
         if not self.calibrated or self.pipetteOffsetPix is None or self.coverslipZPos is None:
             raise Exception("Cell Sorter is not calibrated")
+        if self.microscope.floor_Z is None:
+            raise Exception("Cell Plane not set")
 
         self.raise_pipette()     
 
         #move the stage such that it's centered in x, y, put cells in focus
         self.microscope.absolute_move(self.microscope.floor_Z)
         self.stage.reference_move(np.array([x + self.pipetteOffsetPix[0], y + self.pipetteOffsetPix[1]]))
-        print("moving stage to cell")
         self.stage.wait_until_reached(np.array([x + self.pipetteOffsetPix[0], y + self.pipetteOffsetPix[1]]))
         time.sleep(0.5)
 
@@ -115,16 +116,13 @@ class CalibratedCellSorter(TaskController):
             self.absolute_move(self.coverslipZPos, self.slowMoveSpeed)
             self.cellsorterManip.wait_until_still()
         else:
-            print('fast move')
             #move quickly to slowMoveRegion away from setpoint
             initSetpoint = self.coverslipZPos + np.sign(self.slowMoveRegion - self.coverslipZPos) * self.slowMoveRegion
             self.absolute_move(initSetpoint, self.fastMoveSpeed)
             self.cellsorterManip.wait_until_still()
-            print(f'slow move')
             #move slowly to setpoint
             self.absolute_move(self.coverslipZPos, self.slowMoveSpeed)
             self.cellsorterManip.wait_until_still()
 
         self.absolute_move(self.coverslipZPos)
-        print('done')
 

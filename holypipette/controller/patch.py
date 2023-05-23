@@ -5,6 +5,7 @@ from holypipette.devices.amplifier.amplifier import Amplifier
 from holypipette.devices.amplifier.DAQ import DAQ
 from holypipette.devices.manipulator.calibratedunit import CalibratedUnit
 from holypipette.devices.manipulator.microscope import Microscope
+import collections
 
 from holypipette.config import Config
 
@@ -69,6 +70,23 @@ class AutoPatcher(TaskController):
             # print("Resistance is too high (obstructed?)")
             raise AutopatchError("Resistance is too high (obstructed?)")
         
+    def _isCellDetected(self, lastResDeque, cellThreshold = 0.3*10**6):
+        '''Given a list of three resistance readings, do we think there is a cell where the pipette is?
+        '''
+        print(lastResDeque)
+
+        #criteria 1: the last three readings must be increasing
+        if not lastResDeque[0] < lastResDeque[1] < lastResDeque[2]:
+            return False #last three resistances must be ascending
+        
+        print('ascending')
+        
+        #criteria 2: there must be an increase of at least 0.3 mega ohms
+        r_delta = lastResDeque[2] - lastResDeque[0]
+        return cellThreshold <= r_delta
+        
+
+        
 
     def patch(self, cell_pos=None):
         '''
@@ -87,6 +105,8 @@ class AutoPatcher(TaskController):
         
         if cell_pos is None:
             raise AutopatchError("No cell given to patch!")
+        
+        lastResDeque = collections.deque(maxlen=3)
 
         #setup amp for patching
         self.amplifier.start_patch()
@@ -101,6 +121,7 @@ class AutoPatcher(TaskController):
 
         # set amplifier to resistance mode
         R = self.daq.resistance()
+        lastResDeque.append(R)
         self.debug("Resistance:" + str(R/1e6))
 
         #ensure good pipette (not broken or clogged)
@@ -111,14 +132,14 @@ class AutoPatcher(TaskController):
         self.calibrated_stage.wait_until_still()
 
         print('centered stage on the cell!')
-        time.sleep(1) #just for testing
+        self.sleep(1) #just for testing
 
         #focus on the cell plane
         self.microscope.absolute_move(self.microscope.floor_Z)
         self.microscope.wait_until_still()
 
         print('moved cell plane into focus!')
-        time.sleep(1) #just for testing
+        self.sleep(1) #just for testing
 
         #create a pipette setpoint in stage coordinates
         cell_distance = self.calibrated_unit.um_to_pixels_relative(np.array([0, 0, -self.config.cell_distance]))
@@ -130,6 +151,8 @@ class AutoPatcher(TaskController):
 
         # Check resistance again
         self._verify_resistance()
+        R = self.daq.resistance()
+        lastResDeque.append(R)
 
         # recal pipette offset in multiclamp
         self.amplifier.auto_pipette_offset()
@@ -138,59 +161,76 @@ class AutoPatcher(TaskController):
         # Approach and make the seal
         self.info("Approaching the cell")
         success = False
-        oldR = R
+
+
+        #phase 1: hunt for the cell
+        cellFound = False
         for _ in range(int(self.config.max_distance)):  # move 15 um down
             # move by 1 um down
-            # Cleaner: use reference relative move
             self.calibrated_unit.relative_move(1, axis=2)  # *calibrated_unit.up_position[2]
             self.abort_if_requested()
             self.calibrated_unit.wait_until_still(2)
             self.sleep(1)
             self.amplifier.voltage_clamp()
             R = self.daq.resistance()
+            lastResDeque.append(R)
+
             self.info("R = " + str(self.daq.resistance()/1e6))
-            if R > oldR * (1 + self.config.cell_R_increase):  # R increases: near cell?
-                # Release pressure
-                self.info("Releasing pressure")
-                self.pressure.set_pressure(0)
-                self.sleep(10)
-                #oldR = self.initial_resistance
-                if R > oldR * (1 + self.config.cell_R_increase):
-                    # Still higher, we are near the cell
-                    self.debug("Sealing, R = " + str(self.daq.resistance()/1e6))
-                    self.pressure.set_pressure(self.config.pressure_sealing)
-                    t0 = time.time()
-                    t = t0
-                    R = self.daq.resistance()
-                    if R == None:
-                        self.sleep(0.1)
-                        continue
-                    while (R < self.config.gigaseal_R) | (t - t0 < self.config.seal_min_time):
-                        # Wait at least 15s and until we get a Gigaseal
-                        t = time.time()
-                        if t - t0 < self.config.Vramp_duration:
-                            # Ramp to -70 mV in 10 s (default)
-                            self.amplifier.set_holding(self.config.Vramp_amplitude * (t - t0) / self.config.Vramp_duration)
-                        if t - t0 >= self.config.seal_deadline:
-                            # No seal in 90 s
-                            self.amplifier.stop_patch()
-                            self.pressure.set_pressure(20)
-                            raise AutopatchError("Seal unsuccessful")
-                        R = self.daq.resistance()
-                    success = True
-                    break
-        self.pressure.set_pressure(0)
+            if self._isCellDetected(lastResDeque):
+                cellFound = True
+                break #we found a cell!
+
+        if not cellFound:
+            self.amplifier.stop_patch()
+            self.pressure.set_pressure(20)
+            raise AutopatchError("Couldn't detect a cell")
+        
+        #move a bit further down to make sure we're at the cell
+        self.calibrated_unit.relative_move(1, axis=2)
+
+
+        #phase 2: attempt to form a gigaseal
+
+        # Release pressure
+        self.info("Cell Detected, Lowering pressure")
+        currPressure = 0
+        
+        self.sleep(5)
+        t0 = time.time()
+        while R < self.config.gigaseal_R:
+            t = time.time()
+            if currPressure < -40:
+                currPressure = 0
+            self.pressure.set_pressure(currPressure)
+
+            if t - t0 < self.config.Vramp_duration: #TODO what is this?
+                # Ramp to -70 mV in 10 s (default)
+                self.amplifier.set_holding(self.config.Vramp_amplitude * (t - t0) / self.config.Vramp_duration)
+                
+            if t - t0 >= self.config.seal_deadline:
+                # Time timeout for gigaseal
+                self.amplifier.stop_patch()
+                self.pressure.set_pressure(20)
+                raise AutopatchError("Seal unsuccessful")
+            
+            #did we reach gigaseal?
+            if R > self.config.gigaseal_R:
+                R = self.daq.resistance()
+                success = True
+                break
+            
+            #else, wait a bit and lower pressure
+            self.sleep(2)
+            currPressure -= 10
+
         if not success:
             self.pressure.set_pressure(20)
             raise AutopatchError("Seal unsuccessful")
 
         self.info("Seal successful, R = " + str(self.daq.resistance()/1e6))
 
-        # Go whole-cell
+        # Phase 3: break into cell
         self.break_in()
-
-        self.amplifier.stop_patch()
-        self.pressure.set_pressure(self.config.pressure_near)
 
     def clean_pipette(self):
         if self.cleaning_bath_position is None:

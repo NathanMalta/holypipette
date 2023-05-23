@@ -5,6 +5,7 @@ import nidaqmx.constants
 import numpy as np
 import scipy.signal as signal
 import math
+import time
 
 __all__ = ['DAQ', 'FakeDAQ']
 
@@ -155,7 +156,10 @@ class DAQ:
     
 class FakeDAQ:
     def __init__(self):
-        pass
+        self.latestResistance = 6 * 10 ** 6
+
+    def resistance(self):
+        return self.latestResistance * math.sin(time.time() / 20) + self.latestResistance + 4*10**6
 
     def getDataFromSquareWave(self, wave_freq, samplesPerSec, dutyCycle, amplitude, recordingTime):
         #create a wave_freq Hz square wave
@@ -179,5 +183,5 @@ class FakeDAQ:
 
         xdata = np.linspace(0, recordingTime, len(data), dtype=float)
 
-        data = np.array([xdata, data])
+        data = np.array([xdata, data]), self.resistance()
         return data

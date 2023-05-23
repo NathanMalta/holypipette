@@ -136,6 +136,8 @@ class FakeCellSorterHandler():
         # get cellsorter pos
         cellSorter_z = self.cellSorterManip.position()
 
+        cellSorter_z *= 1000 #convert to um
+
         #covert to pixels
         cellSorterXY = [self.cellSorterOffset[0] * self.pixels_per_micron, self.cellSorterOffset[1] * self.pixels_per_micron]
 
@@ -159,13 +161,6 @@ class FakeCellSorterHandler():
         return img.astype(np.uint8)
 
             
-
-
-
-
-
-
-    
 class FakePipetteManipulator(FakeManipulator):
     def __init__(self, min=None, max=None, armAngle=np.pi/6):
         super(FakePipetteManipulator, self).__init__(min, max)

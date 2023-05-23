@@ -96,7 +96,7 @@ class EPhysGraph(QWidget):
         #update current graph
         if self.lastestDaqData is not None:
             self.squareWavePlot.clear()
-            self.squareWavePlot.plot(self.lastestDaqData[0], self.lastestDaqData[1])
+            self.squareWavePlot.plot(self.lastestDaqData[0, :], self.lastestDaqData[1, :])
             self.lastestDaqData = None
         
         #update pressure graph
