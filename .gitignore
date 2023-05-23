@@ -6,5 +6,6 @@ screenshots/
 docs/
 dist/
 *.egg-info/
+CellSorterSerial.py
 
 
