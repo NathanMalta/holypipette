@@ -135,13 +135,6 @@ class PipetteInterface(TaskInterface):
     def calibrate_stage(self):
         self.execute([self.calibrated_stage.calibrate])
 
-    @blocking_command(category='Stage',
-                    description='Create a Mosaic image',
-                    task_description='Create a Mosaic Image')
-    def create_mosaic(self):
-        self.execute(self.calibrated_stage.mosaic)
-
-
     @blocking_command(category='Manipulators',
                       description='Calibrate manipulator',
                       task_description='Calibrating manipulator')

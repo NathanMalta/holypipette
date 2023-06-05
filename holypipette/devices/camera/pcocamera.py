@@ -25,7 +25,7 @@ class PcoCamera(Camera):
 
     PCO_RECORDER_LATEST_IMAGE = 0xFFFFFFFF
 
-    def __init__(self, width : int = 1024, height : int = 1024):
+    def __init__(self, width : int = 2048, height : int = 2048):
         super(PcoCamera, self).__init__()
 
         self.width = width #update superclass img width / height vars
@@ -33,7 +33,7 @@ class PcoCamera(Camera):
 
         #setup the pco camera for continuous streaming
         self.cam = pco.Camera()
-        # self.cam.sdk.set_timestamp_mode('binary & ascii')
+        # self.ca .sdk.set_timestamp_mode('binary & ascii')
         config = {'exposure time': 10e-3,
                     'roi': (1, 1, 2048, 2048),
                     'timestamp': 'off',
@@ -54,6 +54,7 @@ class PcoCamera(Camera):
         self.lowerBound = 0
         # self.pipetteFinder = PipetteFinder()
         self.pipetteFocuser = PipetteFocuser()
+        self.lastFrame = None
 
         self.normalize() #normalize image on startup
 
@@ -119,7 +120,7 @@ class PcoCamera(Camera):
             img, meta = self.cam.image(image_number=PcoCamera.PCO_RECORDER_LATEST_IMAGE)
             self.lastFrame = img
             # print(meta)
-        except:
+        except Exception as e:
             return self.lastFrame #there was an error grabbing the most recent frame
 
         return img

@@ -13,7 +13,61 @@ from collections import deque
 from holypipette.devices.amplifier import DAQ
 from holypipette.devices.pressurecontroller import PressureController
 
-__all__ = ["EPhysGraph"]
+__all__ = ["EPhysGraph", "CurrentProtocolGraph"]
+
+class CurrentProtocolGraph(QWidget):
+    def __init__(self, daq : DAQ):
+        super().__init__()
+
+        layout = QVBoxLayout()
+        self.setWindowTitle("Current Protocol")
+        logging.getLogger('matplotlib.font_manager').disabled = True
+        self.daq = daq
+        self.protocolPlot = PlotWidget()
+        self.protocolPlot.setBackground('w')
+        self.protocolPlot.getAxis('left').setPen('k')
+        self.protocolPlot.getAxis('bottom').setPen('k')
+        self.protocolPlot.setLabel('left', "Voltage", units='V')
+        self.protocolPlot.setLabel('bottom', "Samples", units='')
+        layout.addWidget(self.protocolPlot)
+
+        self.latestDisplayedData = None
+
+        self.setLayout(layout)
+        self.raise_()
+        self.show()
+
+        #hide window
+        self.setHidden(True)
+
+        #remap close event to hide window
+        self.closeEvent = lambda: self.setHidden(True)
+
+        #start async daq data update
+        self.updateTimer = QtCore.QTimer()
+        self.updateDt = 100 #ms
+        self.updateTimer.timeout.connect(self.update_plot)
+        self.updateTimer.start(self.updateDt)
+
+
+    def update_plot(self):
+        #is what we displayed the exact same?
+        if self.latestDisplayedData == self.daq.latest_protocol_data or self.daq.latest_protocol_data is None:
+            return
+        
+        #if the window was closed or hidden, relaunch it
+        if self.isHidden():
+            self.setHidden(False)
+            self.isShown = True
+
+        colors = ['k', 'r', 'g', 'b', 'y', 'm', 'c']
+        self.protocolPlot.clear()
+        for i, graph in enumerate(self.daq.latest_protocol_data):
+            xData = graph[0]
+            yData = graph[1]
+            self.protocolPlot.plot(xData, yData, pen=colors[i])
+
+        self.latestDisplayedData = self.daq.latest_protocol_data.copy()
 
 class EPhysGraph(QWidget):
     """A window that plots electrophysiology data from the DAQ
@@ -60,6 +114,7 @@ class EPhysGraph(QWidget):
         self.resistancePlot.setLabel('left', "Resistance", units='Ohms')
         self.resistancePlot.setLabel('bottom', "Samples", units='')
 
+
         self.pressureData = deque(maxlen=100)
         self.resistanceDeque = deque(maxlen=100)
 
@@ -87,10 +142,14 @@ class EPhysGraph(QWidget):
 
     def updateDAQDataAsync(self):
         while True:
+            time.sleep(0.1)
+
+            if self.daq.isRunningCurrentProtocol:
+                continue #don't run membrane test while running a current protocol
+
             self.lastestDaqData, resistance = self.daq.getDataFromSquareWave(10, 50000, 0.5, 0.5, 0.25)
             if resistance is not None:
                 self.resistanceDeque.append(resistance)
-            time.sleep(0.1)
 
     def update_plot(self):
         #update current graph
@@ -109,3 +168,4 @@ class EPhysGraph(QWidget):
         self.resistancePlot.clear()
         resistanceDeque = [i for i in range(len(self.resistanceDeque))]
         self.resistancePlot.plot(resistanceDeque, self.resistanceDeque, pen='k')
+

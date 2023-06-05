@@ -164,9 +164,6 @@ class ManipulatorGui(CameraGui):
         self.register_key_action(Qt.Key_T, Qt.NoModifier,
                                  self.show_tip_switch)
 
-        self.register_key_action(Qt.Key_M, Qt.ControlModifier,
-                                 self.interface.create_mosaic)
-
         # Calibration commands
         self.register_key_action(Qt.Key_C, Qt.ControlModifier,
                                  self.interface.calibrate_stage)

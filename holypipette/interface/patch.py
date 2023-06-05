@@ -58,6 +58,7 @@ class AutoPatchInterface(TaskInterface):
         super(AutoPatchInterface, self).__init__()
         self.config = PatchConfig(name='Patch')
         self.amplifier = amplifier
+        self.daq = daq
         self.pressure = pressure
         self.pipette_controller = pipette_interface
         autopatcher = AutoPatcher(amplifier, daq, pressure, self.pipette_controller.calibrated_unit,
@@ -98,6 +99,15 @@ class AutoPatchInterface(TaskInterface):
 
         #move cell sorter to cell
         self.execute(self.pipette_controller.calibrated_cellsorter.center_cellsorter_on_point, argument=[cellx, celly, cellz])
+
+    @blocking_command(category='DAQ',
+            description='Run a Current Protocol on the Cell',
+            task_description='Run a Current Protocol on the Cell')
+    def run_current_protocol(self):
+        #grab cell from list
+
+        #move cell sorter to cell
+        self.execute(self.current_autopatcher.run_current_protocol)
 
     @command(category='Patch', description='Add a mouse position to the list of cells to patch')
     def add_cell(self, position):

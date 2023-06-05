@@ -6,10 +6,17 @@ import numpy as np
 import scipy.signal as signal
 import math
 import time
+import threading
 
 __all__ = ['DAQ', 'FakeDAQ']
 
 class DAQ:
+    C_CLAMP_AMP_PER_VOLT = 400 * 1e-12 #400 pA (supplied cell) / V (DAQ out)
+    C_CLAMP_VOLT_PER_VOLT = (10 * 1e-3) / (1e-3) #10 mV (DAQ input) / V (cell out)
+
+    V_CLAMP_VOLT_PER_VOLT = (20 * 1e-3) #20 mV (supplied cell) / V (DAQ out)
+    V_CLAMP_VOLT_PER_AMP = 0.5 / 1e-9 #0.5V DAQ out (DAQ input) / nA (cell out)
+
     def __init__(self, readDev, readChannel, cmdDev, cmdChannel):
         self.readDev = readDev
         self.cmdDev = cmdDev
@@ -17,6 +24,10 @@ class DAQ:
         self.readChannel = readChannel
         self.cmdChannel = cmdChannel
         self.latestResistance = None
+        self.isRunningCurrentProtocol = False
+        self._deviceLock = threading.Lock()
+
+        self.latest_protocol_data = None
 
         #read constants
 
@@ -36,11 +47,7 @@ class DAQ:
         if data is None or np.where(data == None)[0].size > 0:
             data = np.zeros(self.numSamples)
 
-        #convert from V to pA
-        data = data * 2000
-
-        #convert from pA to Amps
-        data = data * 1e-12
+        
             
         return data
         
@@ -65,22 +72,85 @@ class DAQ:
         wavesPerSec = samplesPerSec // period
 
         for i in range(wavesPerSec):
-            data[i * period : i * period + onTime] = amplitude
+            data[i * period : i * period + onTime] = 0
+            data[i * period + onTime : (i+1) * period] = amplitude
 
         task.write(data)
         
         return task
     
+    def getDataFromCurrentProtocol(self, startCurrentPicoAmp=-200, endCurrentPicoAmp=300, stepCurrentPicoAmp=100, highTimeMs=400):
+        '''Sends a series of square waves from startCurrentPicoAmp to endCurrentPicoAmp (inclusive) with stepCurrentPicoAmp pA increments.
+           Square wave period is 2 * highTimeMs ms. Returns a 2d array of data with each row being a square wave.
+        '''
+
+        self.isRunningCurrentProtocol = True
+        self.latest_protocol_data = None #clear data
+        num_waves = int((endCurrentPicoAmp - startCurrentPicoAmp) / stepCurrentPicoAmp) + 1
+
+        #convert to amps
+        startCurrent = startCurrentPicoAmp * 1e-12
+
+        #get wave frequency Hz
+        wave_freq = 1 / (2 * highTimeMs * 1e-3)
+
+        #general constants for square waves
+        samplesPerSec = 50000
+        recordingTime = 3 * highTimeMs * 1e-3
+
+        for i in range(num_waves):
+            currentAmps = startCurrent + i * stepCurrentPicoAmp * 1e-12
+            print(f'Sending {currentAmps * 1e12} pA square wave.')
+
+            #convert to DAQ output
+            amplitude = currentAmps / self.C_CLAMP_AMP_PER_VOLT
+            
+            #send square wave to DAQ
+            self._deviceLock.acquire()
+            sendTask = self._sendSquareWave(wave_freq, samplesPerSec, 0.5, amplitude, recordingTime)
+            sendTask.start()
+            data = self._readAnalogInput(samplesPerSec, recordingTime)
+            sendTask.stop()
+            sendTask.close()
+            self._deviceLock.release()
+
+            #convert to V (cell out)
+            data = data / self.C_CLAMP_VOLT_PER_VOLT
+            
+            lowZero = currentAmps > 0
+            data = self._shiftWaveToZero(data, lowZero)
+            triggeredSamples = data.shape[0]
+            xdata = np.linspace(0, triggeredSamples / samplesPerSec, triggeredSamples, dtype=float)
+            time.sleep(0.5)
+
+            if self.latest_protocol_data is None:
+                self.latest_protocol_data = [[xdata, data]]
+            else:
+                self.latest_protocol_data.append([xdata, data])
+        
+        self.isRunningCurrentProtocol = False
+
+        return self.latest_protocol_data
+
+    
     def getDataFromSquareWave(self, wave_freq, samplesPerSec, dutyCycle, amplitude, recordingTime):
+        self._deviceLock.acquire()
         sendTask = self._sendSquareWave(wave_freq, samplesPerSec, dutyCycle, amplitude, recordingTime)
         sendTask.start()
         data = self._readAnalogInput(samplesPerSec, recordingTime)
         sendTask.stop()
         sendTask.close()
+        self._deviceLock.release()
         
-        data, self.latestResistance = self._triggerSquareWave(150e-12, data, amplitude * 0.02)
+        data, self.latestResistance = self._triggerSquareWave(data, amplitude * 0.02)
         triggeredSamples = data.shape[0]
         xdata = np.linspace(0, triggeredSamples / samplesPerSec, triggeredSamples, dtype=float)
+
+        #convert from V to pA
+        data = data * 2000
+
+        #convert from pA to Amps
+        data = data * 1e-12
 
         return np.array([xdata, data]), self.latestResistance
     
@@ -94,35 +164,36 @@ class DAQ:
         data = signal.filtfilt(b, a, data, irlen=1000)
         return data
 
+    def _shiftWaveToZero(self, data, lowZero=True):
+        mean = np.mean(data)
+
+        if lowZero:
+            zeroAvg = np.mean(data[data < mean])
+        else:
+            zeroAvg = np.mean(data[data > mean])
+
+        #set data mean to 0
+        shiftedData = data - zeroAvg
+
+        return shiftedData
+
     
-    def _triggerSquareWave(self, triggerVal, data, cmdVoltage):
-        # #add 60 hz filter
-        # data = self._filter60Hz(data)
-        # return data, None #completely disable triggering
-        
-        # #print most prominant frequency in the data
-        # freqs, psd = signal.welch(data, fs=50000, nperseg=2048)
-        
-        # # #get 10 frequencies with the highest powers
-        # freqs = freqs[np.argsort(psd)][-10:]
-        # psd = psd[np.argsort(psd)][-10:]
-
-        # print(freqs)
-
-        # return data, None
-
+    def _triggerSquareWave(self, data, cmdVoltage, calcResistance=True):
         try:
-            #split data into high and low wave
-            mean = np.mean(data)
-            highAvg = np.mean(data[data > mean])
-            lowAvg = np.mean(data[data < mean])
+            shiftedData = self._shiftWaveToZero(data)
+            mean = np.mean(shiftedData)
+            lowAvg = np.mean(shiftedData[shiftedData < mean])
+            highAvg = np.mean(shiftedData[shiftedData > mean])
 
-            #set data mean to 0
-            shiftedData = data - lowAvg
+            #split data into high and low wave
+            triggerVal = np.mean(shiftedData)
 
             #is trigger value ever reached?
             if np.where(shiftedData < triggerVal)[0].size == 0 or np.where(shiftedData > triggerVal)[0].size == 0:
-                return data, None
+                if calcResistance:
+                    return shiftedData, None
+                else:
+                    return shiftedData
 
             #find the first index where the data is less than triggerVal
             fallingEdge = np.where(shiftedData < triggerVal)[0][0]
@@ -145,13 +216,24 @@ class DAQ:
             secondRisingEdge = np.where(shiftedData[secondFallingEdge:] > triggerVal)[0][0] + secondFallingEdge
             shiftedData = shiftedData[:secondRisingEdge]
 
-            #calculate resistance
-            resistance = cmdVoltage / (highAvg - lowAvg)
+            if calcResistance:
+                #convert high and low averages to pA
+                highAvgPA = highAvg * 2000 * 1e-12
+                lowAvgPA = lowAvg * 2000 * 1e-12
+                #calculate resistance
+                resistance = cmdVoltage / (highAvgPA - lowAvgPA)
 
-            return shiftedData, resistance
-        except:
+                return shiftedData, resistance
+            else:
+                return shiftedData
+            
+        except Exception as e:
+            print(e)
             #we got an invalid square wave
-            return data, None
+            if calcResistance:
+                return data, None
+            else:
+                return data
         
     
 class FakeDAQ:

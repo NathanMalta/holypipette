@@ -11,7 +11,7 @@ from holypipette.devices.manipulator import *
 from holypipette.devices.cellsorter import CellSorterController, CellSorterManip, FakeCellSorterManip
 import serial
 
-stageSerial = serial.Serial(port='COM6', baudrate=9600, timeout=1)
+stageSerial = serial.Serial(port='COM7', baudrate=9600, timeout=1)
 # zAxisEncoderComms = serial.Serial(port='COM19', baudrate=115200, timeout=1)
 # stageController = ScientificaSerialEncoder(stageSerial, zAxisEncoderComms)
 stageController = ScientificaSerialNoEncoder(stageSerial)
@@ -29,14 +29,14 @@ unit = ManipulatorUnit(sensapexController, [1, 2, 3])
 daq = DAQ('cDAQ1Mod3', 'ai0', 'cDaq1Mod1', 'ao1') #This is "old" DAQ
 amplifier = MultiClampChannel(channel=1)
 
-pressureSerial = serial.Serial(port='COM15', baudrate=9600, timeout=0)
+pressureSerial = serial.Serial(port='COM5', baudrate=9600, timeout=0)
 pressure = IBBPressureController(channel=1, arduinoSerial=pressureSerial)
 
-controllerSerial = serial.Serial('COM8', 115200, timeout=2, parity=serial.PARITY_NONE, stopbits=1, 
+controllerSerial = serial.Serial('COM11', 115200, timeout=2, parity=serial.PARITY_NONE, stopbits=1, 
                                     bytesize=8, write_timeout=1, inter_byte_timeout=2)
 cellSorterController = CellSorterController(controllerSerial)
 
-# manipulatorSerial = serial.Serial('COM14', 57600, timeout=2, parity=serial.PARITY_NONE, stopbits=2, 
-#                                             bytesize=8, write_timeout=1, inter_byte_timeout=2)
-# cellSorterManip = CellSorterManip(manipulatorSerial)
-cellSorterManip = FakeCellSorterManip()
+manipulatorSerial = serial.Serial('COM10', 57600, timeout=2, parity=serial.PARITY_NONE, stopbits=2, 
+                                            bytesize=8, write_timeout=1, inter_byte_timeout=2)
+cellSorterManip = CellSorterManip(manipulatorSerial)
+# cellSorterManip = FakeCellSorterManip()

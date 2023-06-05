@@ -35,6 +35,16 @@ class AutoPatcher(TaskController):
         self.contact_position = None
         self.initial_resistance = None
 
+        self.current_protocol_graph = None
+
+    def run_current_protocol(self):
+        self.info('Running current protocol')
+        self.amplifier.current_clamp()
+        self.sleep(0.25)
+        self.daq.getDataFromCurrentProtocol()
+        self.sleep(0.25)
+        self.amplifier.voltage_clamp()
+
     def break_in(self):
         '''
         Breaks in. The pipette must be in cell-attached mode
