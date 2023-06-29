@@ -10,6 +10,7 @@ from holypipette.devices.pressurecontroller import IBBPressureController, FakePr
 from holypipette.devices.manipulator import *
 from holypipette.devices.cellsorter import CellSorterController, CellSorterManip, FakeCellSorterManip
 import serial
+from holypipette.devices.lamp import Lumencore
 
 stageSerial = serial.Serial(port='COM7', baudrate=9600, timeout=1)
 # zAxisEncoderComms = serial.Serial(port='COM19', baudrate=115200, timeout=1)
@@ -32,11 +33,14 @@ amplifier = MultiClampChannel(channel=1)
 pressureSerial = serial.Serial(port='COM5', baudrate=9600, timeout=0)
 pressure = IBBPressureController(channel=1, arduinoSerial=pressureSerial)
 
-controllerSerial = serial.Serial('COM11', 115200, timeout=2, parity=serial.PARITY_NONE, stopbits=1, 
+controllerSerial = serial.Serial('COM12', 115200, timeout=2, parity=serial.PARITY_NONE, stopbits=1, 
                                     bytesize=8, write_timeout=1, inter_byte_timeout=2)
 cellSorterController = CellSorterController(controllerSerial)
 
 manipulatorSerial = serial.Serial('COM10', 57600, timeout=2, parity=serial.PARITY_NONE, stopbits=2, 
                                             bytesize=8, write_timeout=1, inter_byte_timeout=2)
 cellSorterManip = CellSorterManip(manipulatorSerial)
+
+lampCom = serial.Serial('COM6', 9600, timeout=1, stopbits=serial.STOPBITS_ONE, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
+lumencore = Lumencore(lampCom)
 # cellSorterManip = FakeCellSorterManip()

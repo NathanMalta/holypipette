@@ -106,7 +106,7 @@ class Lumencore:
         return temp
 
 if __name__ == '__main__':
-    lampCom = serial.Serial('COM20', 9600, timeout=1, stopbits=serial.STOPBITS_ONE, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
+    lampCom = serial.Serial('COM6', 9600, timeout=1, stopbits=serial.STOPBITS_ONE, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
     l = Lumencore(lampCom)
 
     l.enable(LightColor.BLUE, ExcitationFilter.GREEN)
