@@ -40,7 +40,7 @@ class AutoPatcher(TaskController):
         self.info("Breaking in")
         R = self.amplifier.resistance()
         if R < self.config.gigaseal_R:
-            raise AutopatchError("Seal lost")
+            raise AutopatchError("No Gigaseal")
 
         pressure = 0
         trials = 0

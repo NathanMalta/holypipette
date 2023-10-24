@@ -32,7 +32,7 @@ class ManipulatorGui(CameraGui):
         self.display_edit_funcs.append(self.draw_scale_bar)
         self.display_edit_funcs.append(self.display_manipulator)
         self.display_edit_funcs.append(self.show_tip)
-        self.add_config_gui(self.interface.calibration_config)
+        # self.add_config_gui(self.interface.calibration_config)
 
         self.show_tip_on = False
         self.tip_x, self.tip_y = None, None

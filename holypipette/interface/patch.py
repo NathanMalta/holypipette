@@ -142,7 +142,12 @@ class AutoPatchInterface(TaskInterface):
         self.execute(self.current_autopatcher.contact_detection)
 
     
-    def set_pressure_near(self):
+    def set_pressure_ambient(self):
         '''puts the pipette under positive pressure to prevent blockages
         '''
         self.pressure.set_pressure(self.config.pressure_near)
+
+    def set_pressure_sealing(self):
+        '''puts a slight negative pressure to gigaseal the cell
+        '''
+        self.pressure.set_pressure(self.config.pressure_sealing)

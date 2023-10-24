@@ -7,13 +7,13 @@ from PyQt5.QtCore import Qt
 import pyqtgraph as pg
 import PyQt5.QtGui as QtGui
 import numpy as np
-
+import pygame
 
 from holypipette.controller import TaskController
 from holypipette.gui.manipulator import ManipulatorGui
 from holypipette.interface.patch import AutoPatchInterface
 from holypipette.interface.pipettes import PipetteInterface
-from holypipette.interface.base import command
+from holypipette.devices.controller.xboxController import XboxController, Button, Axis
 
 
 class PatchGui(ManipulatorGui):
@@ -35,20 +35,67 @@ class PatchGui(ManipulatorGui):
         self.interface_signals[self.patch_interface] = (self.patch_command_signal,
                                                         self.patch_reset_signal)
         
-        #add patching button tab
-        button_tab = PatchButtons(self.patch_interface, pipette_interface, self.start_task, self.interface_signals)
-        self.add_config_gui(self.patch_interface.config)
-        self.add_tab(button_tab, 'Commands', index = 0)
+        #add manual patching button tab
+        man_button_tab = ManualPatchButtons(self.patch_interface, pipette_interface, self.start_task, self.interface_signals)
+        self.add_tab(man_button_tab, 'Manual Patching', index = 0)
 
-        # Update the pressure and information in the status bar every 50ms
+        #add automatic patching button tab
+        auto_button_tab = AutoPatchButtons(self.patch_interface, pipette_interface, self.start_task, self.interface_signals)
+        # self.add_config_gui(self.patch_interface.config)
+        self.add_tab(auto_button_tab, 'Automatic Patching', index = 1)
+
+        # Update the pressure and information in the status bar
         self.pressure_timer = QtCore.QTimer()
         self.pressure_timer.timeout.connect(self.display_pressure)
-        self.pressure_timer.start(50)
-        self.patch_interface.set_pressure_near()
+        self.pressure_timer.start(100)
+        self.patch_interface.set_pressure_ambient()
+
+        # Setup controller (if available)
+        pygame.init()
+        pygame.joystick.init()
+        if pygame.joystick.get_count() > 0:
+            self.set_status_message('Controller Status', 'Controller Connected')
+
+            self.controller_timer = QtCore.QTimer()
+            self.controller_timer.timeout.connect(self.update_controller)
+            self.controller_timer.start(50)
+
+            self.xbox_controller = XboxController()
+
+            def a_pressed(status):
+                if status:
+                    print('A pressed')
+                else:
+                    print('A released')
+
+            self.register_controller_actions()
+
+            self.xbox_controller.link_button(Button.A_BUTTON, a_pressed)
+        else:
+            self.set_status_message('Controller Status', 'Controller Not Connected')
+
+
+    def register_controller_actions(self):
+        self.xbox_controller.link_axis(Axis.LEFT_X, lambda x: self.pipette_interface.move_stage_horizontal(x * 10))
+        self.xbox_controller.link_axis(Axis.LEFT_Y, lambda x: self.pipette_interface.move_stage_vertical(x * 10))
+
+        self.xbox_controller.link_axis(Axis.RIGHT_X, lambda x: self.pipette_interface.move_pipette_x(x * 10))
+        self.xbox_controller.link_axis(Axis.RIGHT_Y, lambda x: self.pipette_interface.move_pipette_y(x * 10))
+
+        self.xbox_controller.link_button_hold(Button.DPAD_UP, lambda: self.pipette_interface.move_microscope(10))
+        self.xbox_controller.link_button_hold(Button.DPAD_DOWN, lambda: self.pipette_interface.move_microscope(-10))
+
+
+        self.xbox_controller.link_axis(Axis.RIGHT_TRIGGER, lambda x: self.pipette_interface.move_pipette_z(x * 10))
+        self.xbox_controller.link_axis(Axis.LEFT_TRIGGER, lambda x: self.pipette_interface.move_pipette_z(x * -10))
 
     def display_pressure(self):
         pressure = self.patch_interface.pressure.get_pressure()
         self.set_status_message('pressure', 'Pressure: {:.0f} mbar'.format(pressure))
+
+    def update_controller(self):
+        pygame.event.pump()
+        self.xbox_controller.update()
 
     def register_commands(self):
         super(PatchGui, self).register_commands()
@@ -147,9 +194,9 @@ class ButtonTabWidget(QtWidgets.QWidget):
         layout.addWidget(box)
 
     
-class PatchButtons(ButtonTabWidget):
+class AutoPatchButtons(ButtonTabWidget):
     def __init__(self, patch_interface : AutoPatchInterface, pipette_interface : PipetteInterface, start_task, interface_signals):
-        super(PatchButtons, self).__init__()
+        super(AutoPatchButtons, self).__init__()
         self.patch_interface = patch_interface
         self.pipette_interface = pipette_interface
 
@@ -166,9 +213,14 @@ class PatchButtons(ButtonTabWidget):
         self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
 
         #add a box for cal
-        buttonList = [['Set Cell Plane'], ['Replace Pipette']]
-        cmds = [[self.pipette_interface.set_floor], [self.pipette_interface.replaceTip]]
+        buttonList = [['Set Cell Plane']]
+        cmds = [[self.pipette_interface.set_floor]]
         self.addButtonList('calibration', layout, buttonList, cmds)
+
+        #add a box for maintenance
+        buttonList = [['Clean Pipette'], ['Replace Pipette']]
+        cmds = [[self.pipette_interface.clean_pipette], [self.pipette_interface.replaceTip]]
+        self.addButtonList('maintenance', layout, buttonList, cmds)
 
         #add a box for movement
         buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Center Pipette']]
@@ -176,9 +228,59 @@ class PatchButtons(ButtonTabWidget):
         self.addButtonList('movement', layout, buttonList, cmds)
 
         #add a box for patching cmds
-        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch'], ['Clean Pipette']]
-        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch], [self.pipette_interface.clean_pipette]]
+        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch']]
+        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch]]
         self.addButtonList('patching', layout, buttonList, cmds)
+        
+        self.setLayout(layout)
+
+    def update_pipette_pos_labels(self, indicies):
+        #update the position labels
+        currPos = self.pipette_interface.calibrated_unit.unit.position()
+        for i, ind in enumerate(indicies):
+            label = self.pos_labels[ind]
+            label.setText(f'{label.text().split(":")[0]}: {currPos[i]:.2f}')
+
+    def update_stage_pos_labels(self, indicies):
+        #update the position labels
+        xyPos = self.pipette_interface.calibrated_stage.position()
+        zPos = self.pipette_interface.microscope.position()
+        for i, ind in enumerate(indicies):
+            label = self.pos_labels[ind]
+            if i < 2:
+                label.setText(f'{label.text().split(":")[0]}: {xyPos[i]:.2f}')
+            else:
+                label.setText(f'{label.text().split(":")[0]}: {zPos:.2f}')
+
+
+
+class ManualPatchButtons(ButtonTabWidget):
+    def __init__(self, patch_interface : AutoPatchInterface, pipette_interface : PipetteInterface, start_task, interface_signals):
+        super(ManualPatchButtons, self).__init__()
+        self.patch_interface = patch_interface
+        self.pipette_interface = pipette_interface
+
+        self.start_task = start_task
+        self.interface_signals = interface_signals
+
+        self.pos_update_timers = []
+        self.pos_labels = []
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.setAlignment(Qt.AlignTop)
+
+        self.addPositionBox('stage position', layout, self.update_stage_pos_labels)
+        self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
+
+        #add a box for maintenance
+        buttonList = [['Clean Pipette'], ['Replace Pipette']]
+        cmds = [[self.pipette_interface.clean_pipette], [self.pipette_interface.replaceTip]]
+        self.addButtonList('maintenance', layout, buttonList, cmds)
+
+        #add a box for patching cmds
+        buttonList = [['Ambient Pressure'], ['Gigaseal Pressure'], ['Break-in Pressure']]
+        cmds = [[self.patch_interface.set_pressure_ambient], [self.patch_interface.set_pressure_sealing], [self.patch_interface.break_in]]
+        self.addButtonList('Pressue Control', layout, buttonList, cmds)
         
         self.setLayout(layout)
 

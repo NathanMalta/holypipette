@@ -85,7 +85,7 @@ class ManipulatorUnit(Manipulator):
             self.dev.relative_move_group(x, self.axes)
         else:
             self.dev.relative_move(x, self.axes[axis])
-        self.sleep(.05)
+        # self.sleep(.05)
 
     def stop(self, axis = None):
         """

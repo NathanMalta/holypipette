@@ -6,6 +6,7 @@ import cv2
 from pathlib import Path
 import time
 import math
+import random
 
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 from enum import Enum
@@ -50,13 +51,16 @@ class WorldModel():
     def replacePipette(self):
         self._setupPipetteResistances() #new pipette, new resistances!
         self.pipette_state = PipetteState.TIP_NORMAL
+        print('PIPETTE NORMAL!')
     
     def breakPipette(self):
         self.pipette_state = PipetteState.TIP_BROKEN
+        print('PIPETTE BROKEN!')
 
     def cleanPipette(self):
         if self.pipette_state == PipetteState.TIP_CLOGGED:
             self.pipette_state = PipetteState.TIP_NORMAL
+            print('PIPETTE CLEANED!')
 
     def getResistance(self):
         res = self._standardPipetteResistance()
@@ -68,13 +72,15 @@ class WorldModel():
         distFromSlip = pipettePos[2]
 
         if self.pipette_state == PipetteState.TIP_SEALED or self.pipette_state == PipetteState.TIP_BROKEN_IN:
-            if distFromSlip > 20 or self.pressure.get_pressure() > 0:
+            if distFromSlip > 20 or self.pressure.get_pressure() > 10:
                 #we're too far, revert to non-gigasealed
                 self.pipette_state = PipetteState.TIP_CLOGGED
+                print('PIPETTE CLOGGED!')
             
             if self.pressure.get_pressure() < -190 and self.pipette_state == PipetteState.TIP_SEALED:
                 #break in
                 self.pipette_state = PipetteState.TIP_BROKEN_IN
+                print('PIPETTE BROKEN!')
 
             return res
 
@@ -86,9 +92,10 @@ class WorldModel():
         if self._isCellAtPos(pipettePos[0], pipettePos[1]):
             res += 0.1e6 * (20 - distFromSlip)
 
-            if self.pressure.get_pressure() == 0:
+            if self.pressure.get_pressure() <= 0 and random.random() < 0.01: #1% chance of gigaseal per frame
                 #gigaseal!
                 self.pipette_state = PipetteState.TIP_SEALED
+                print('PIPETTE SEALED!')
 
         return res
         
@@ -253,6 +260,8 @@ class FakeCalCamera(Camera):
         dt = time.time() - start
         if dt < (1/self.targetFramerate):
             time.sleep((1/self.targetFramerate) - dt)
+
+        # print(f'fps: {1/(time.time() - start)}')
         
         return frame
     

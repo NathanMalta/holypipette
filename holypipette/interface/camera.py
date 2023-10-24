@@ -23,6 +23,7 @@ class CameraInterface(TaskInterface):
             #main_gui.image_edit_funcs.append(self.pipette_contact_detection)
 
     def signal_updated_exposure(self):
+        return
         # Should be called by subclasses that actually support setting the exposure
         exposure = self.camera.get_exposure()
         if exposure > 0:

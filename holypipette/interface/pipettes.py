@@ -68,8 +68,8 @@ class PipetteInterface(TaskInterface):
 
     
     @blocking_command(category='Manipulators',
-            description='Replace Tip of the pipette',
-            task_description='Replace Pipette')
+            description='Clean the pipette',
+            task_description='Clean Pipette')
     def clean_pipette(self):
         self.execute([self._clean_pipette])
 
