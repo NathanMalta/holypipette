@@ -50,9 +50,6 @@ class AutoPatcher(TaskController):
             pressure += self.config.pressure_ramp_increment
             if abs(pressure) > abs(self.config.pressure_ramp_max):
                 raise AutopatchError("Break-in unsuccessful")
-            if self.config.zap:
-                self.debug('zapping')
-                self.amplifier.zap()
             self.pressure.ramp(amplitude=pressure, duration=self.config.pressure_ramp_duration)
             self.sleep(1.3)
 
@@ -147,38 +144,27 @@ class AutoPatcher(TaskController):
                 self.abort_if_requested()
                 self.calibrated_unit.wait_until_still(2)
                 self.sleep(1)
-                self.amplifier.voltage_clamp()
                 R = self.amplifier.resistance()
                 self.info("R = " + str(self.amplifier.resistance()/1e6))
 
                 print(R, oldR, self.config.cell_R_increase)
-                if R > oldR * (1 + self.config.cell_R_increase):  # R increases: near cell?
-                    # Release pressure
-                    self.info("Releasing pressure")
-                    self.pressure.set_pressure(0)
-                    self.sleep(10)
-                    #oldR = self.initial_resistance
-                    if R > oldR * (1 + self.config.cell_R_increase):
-                        # Still higher, we are near the cell
-                        self.debug("Sealing, R = " + str(self.amplifier.resistance()/1e6))
-                        self.pressure.set_pressure(self.config.pressure_sealing)
-                        t0 = time.time()
-                        t = t0
+                if R > oldR * 1.15:  # R increases: near cell?
+                    self.debug("Sealing, R = " + str(self.amplifier.resistance()/1e6))
+                    self.pressure.set_pressure(self.config.pressure_sealing)
+                    t0 = time.time()
+                    t = t0
+                    R = self.amplifier.resistance()
+                    while (R < self.config.gigaseal_R) | (t - t0 < self.config.seal_min_time):
+                        # Wait at least 15s and until we get a Gigaseal
+                        time.sleep(0.25)
+                        t = time.time()
+                        if t - t0 >= self.config.seal_deadline:
+                            # No seal in 90 s
+                            self.amplifier.stop_patch()
+                            raise AutopatchError("Seal unsuccessful")
                         R = self.amplifier.resistance()
-                        while (R < self.config.gigaseal_R) | (t - t0 < self.config.seal_min_time):
-                            # Wait at least 15s and until we get a Gigaseal
-                            time.sleep(0.25)
-                            t = time.time()
-                            if t - t0 < self.config.Vramp_duration:
-                                # Ramp to -70 mV in 10 s (default)
-                                self.amplifier.set_holding(self.config.Vramp_amplitude * (t - t0) / self.config.Vramp_duration)
-                            if t - t0 >= self.config.seal_deadline:
-                                # No seal in 90 s
-                                self.amplifier.stop_patch()
-                                raise AutopatchError("Seal unsuccessful")
-                            R = self.amplifier.resistance()
-                        success = True
-                        break
+                    success = True
+                    break
             if not success:
                 self.pressure.set_pressure(20)
                 raise AutopatchError("Seal unsuccessful")
@@ -187,9 +173,6 @@ class AutoPatcher(TaskController):
 
         # Go whole-cell
         self.break_in()
-
-        self.amplifier.stop_patch()
-        self.pressure.set_pressure(self.config.pressure_near)
 
     def clean_pipette(self):
         if self.cleaning_bath_position is None:
@@ -339,8 +322,7 @@ class AutoPatcher(TaskController):
                     raise AutopatchError("Seal unsuccessful")
                 self.info("Seal successful, R = " + str(self.amplifier.resistance() / 1e6))
                 self.break_in()
-                self.amplifier.stop_patch()
-                self.pressure.set_pressure(self.config.pressure_near)
+                self.sleep(5)
                 self.clean_pipette()
 
         finally:

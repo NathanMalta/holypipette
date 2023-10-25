@@ -461,31 +461,6 @@ class CameraGui(QtWidgets.QMainWindow):
         self.status_label = QtWidgets.QLabel()
         self.status_bar.addPermanentWidget(self.status_label)
 
-        self.help_button = QtWidgets.QToolButton(clicked=self.toggle_help)
-        self.help_button.setIcon(qta.icon('fa.question-circle'))
-        self.help_button.setCheckable(True)
-        self.help_button.setToolTip('Toggle help window display')
-
-        self.log_button = QtWidgets.QToolButton(clicked=self.toggle_log)
-        self.log_button.setIcon(qta.icon('fa.file'))
-        self.log_button.setCheckable(True)
-        self.log_button.setToolTip('Toggle log window display')
-
-        self.record_button = QtWidgets.QToolButton(clicked=self.toggle_recording)
-        self.record_button.setIcon(qta.icon('fa.video-camera'))
-        self.record_button.setCheckable(True)
-        self.record_button.setToolTip('Toggle video recording')
-        self.record_button.setStyleSheet('QToolButton:checked {background-color: red;}'
-        )
-        self.autoexposure_button = QtWidgets.QToolButton(clicked=self.camera_interface.normalize)
-        self.autoexposure_button.setIcon(qta.icon('fa.camera'))
-        self.autoexposure_button.setToolTip('Normalize the image')
-
-        self.status_bar.addPermanentWidget(self.help_button)
-        self.status_bar.addPermanentWidget(self.log_button)
-        self.status_bar.addPermanentWidget(self.record_button)
-        self.status_bar.addPermanentWidget(self.autoexposure_button)
-
         self.status_bar.setSizeGripEnabled(False)
         self.setStatusBar(self.status_bar)
         self.status_bar.messageChanged.connect(self.status_message_updated)
@@ -534,8 +509,15 @@ class CameraGui(QtWidgets.QMainWindow):
         self.config_tab = QtWidgets.QTabWidget()
         self.splitter.addWidget(self.config_tab)
         self.setCentralWidget(self.splitter)
-        self.splitter.setSizes([1, 0])
+        self.splitter.setSizes([int(self.width() * 0.7), int(self.width() * 0.3)])
         self.splitter.splitterMoved.connect(self.splitter_size_changed)
+
+        #stop splitter from closing one side completely
+        self.splitter.setCollapsible(0, False)
+        self.splitter.setCollapsible(1, False)
+
+        #set minimum size of right side
+        self.splitter.widget(1).setMinimumWidth(350)
 
         # Display error messages directly in the status bar
         handler = LogNotifyHandler(self.log_signal)
@@ -723,13 +705,6 @@ class CameraGui(QtWidgets.QMainWindow):
             interface.task_finished.connect(self.task_finished)
             interface.connect(self)
         self.register_commands()
-        # Add a button for the configuration options if necessary
-        if self.config_tab.count() > 0:
-            self.config_button = QtWidgets.QToolButton(
-                clicked=self.toggle_configuration_display)
-            self.config_button.setIcon(qta.icon('fa.cogs'))
-            self.config_button.setCheckable(True)
-            self.status_bar.addPermanentWidget(self.config_button)
 
     def register_key_action(self, key, modifier, command, argument=None,
                             default_doc=True):
@@ -913,16 +888,11 @@ class CameraGui(QtWidgets.QMainWindow):
     def toggle_overlay(self):
         self.show_overlay = not self.show_overlay
 
-    def toggle_configuration_display(self):
+    def activate_configuration_display(self):
         current_sizes = self.splitter.sizes()
         if current_sizes[1] == 0:
             min_size = self.config_tab.sizeHint().width()
             new_sizes = [current_sizes[0]-min_size, min_size]
-            self.config_button.setChecked(True)
-        else:
-            new_sizes = [current_sizes[0]+current_sizes[1], 0]
-            self.setFocus()
-            self.config_button.setChecked(False)
         self.splitter.setSizes(new_sizes)
 
 

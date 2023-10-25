@@ -53,7 +53,7 @@ class EPhysGraph(QWidget):
         self.resistancePlot.getAxis('bottom').setPen('k')
 
         #set labels
-        self.squareWavePlot.setLabel('left', "Voltage", units='V')
+        self.squareWavePlot.setLabel('left', "Current", units='A')
         self.squareWavePlot.setLabel('bottom', "Time", units='s')
         self.pressurePlot.setLabel('left', "Pressure", units='mbar')
         self.pressurePlot.setLabel('bottom', "Time", units='s')
@@ -87,14 +87,14 @@ class EPhysGraph(QWidget):
 
     def updateDAQDataAsync(self):
         while True:
-            self.lastestDaqData = self.daq.getDataFromSquareWave(10, 50000, 0.5, 0.5, 0.5)
+            self.lastestDaqData = self.daq.getDataFromSquareWave(10, 5000, 0.5, 0.5, 0.1)
             time.sleep(0.1)
 
     def update_plot(self):
         #update data
         if self.lastestDaqData is not None:
             self.squareWavePlot.clear()
-            self.squareWavePlot.plot(self.lastestDaqData[0], self.lastestDaqData[1])
+            self.squareWavePlot.plot(self.lastestDaqData[0], self.lastestDaqData[1], pen='k')
             # self.squareWavePlot.setYRange(-200, 200)
             self.lastestDaqData = None
         

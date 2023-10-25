@@ -36,17 +36,29 @@ class WorldModel():
         self.pipetteResistanceNoise = 0.1e6 #0.1 Mohm
 
         self.nearCellAddition = 0
+
+        self.tau_range = [5 * 1e-3, 10 * 1e-3] #valid tau range
+        self.tau = np.random.uniform(self.tau_range[0], self.tau_range[1])
+
+        self.axis_resistance_range = [5 * 1e6, 30 * 1e6] #valid axis resistances between 5, 30 Mohm
+        self.axis_resistance = np.random.uniform(self.axis_resistance_range[0], self.axis_resistance_range[1])
+
+        self.seal_location = None
     
     def _setupPipetteResistances(self):
         self.normalResistance = np.random.randint(4e6, 7e6) #4-7 Mohm
         self.crashedResistance = np.random.randint(0.3e6, 2e6) #0.3-2 Mohm
         self.sealedResistance = np.random.randint(1e9, 2.5e9)
+        self.brokenInResistance = np.random.randint(50e6, 250e6) #50-250 Mohm
 
     def isTipBroken(self):
         return self.pipette_state == PipetteState.TIP_BROKEN
         
     def isSealed(self):
         return self.pipette_state == PipetteState.TIP_SEALED
+    
+    def isBrokenIn(self):
+        return self.pipette_state == PipetteState.TIP_BROKEN_IN
         
     def replacePipette(self):
         self._setupPipetteResistances() #new pipette, new resistances!
@@ -62,7 +74,12 @@ class WorldModel():
             self.pipette_state = PipetteState.TIP_NORMAL
             print('PIPETTE CLEANED!')
 
+    def getTau(self):
+        return self.tau
+
     def getResistance(self):
+        '''Get a simulated "steady-state" resistance for the pipette / system (in Ohms)
+        '''
         res = self._standardPipetteResistance()
 
         if self.pipette_state == PipetteState.TIP_BROKEN or self.pipette_state == PipetteState.TIP_CLOGGED:
@@ -72,15 +89,16 @@ class WorldModel():
         distFromSlip = pipettePos[2]
 
         if self.pipette_state == PipetteState.TIP_SEALED or self.pipette_state == PipetteState.TIP_BROKEN_IN:
-            if distFromSlip > 20 or self.pressure.get_pressure() > 10:
-                #we're too far, revert to non-gigasealed
+            seal_dist = np.linalg.norm(np.array(self.seal_location) - np.array(pipettePos))
+            if distFromSlip > 20 or self.pressure.get_pressure() > 10 or seal_dist > 20:
+                #moved too far away from the cell, lose seal
                 self.pipette_state = PipetteState.TIP_CLOGGED
                 print('PIPETTE CLOGGED!')
             
             if self.pressure.get_pressure() < -190 and self.pipette_state == PipetteState.TIP_SEALED:
                 #break in
                 self.pipette_state = PipetteState.TIP_BROKEN_IN
-                print('PIPETTE BROKEN!')
+                print('BREAK IN!')
 
             return res
 
@@ -89,15 +107,29 @@ class WorldModel():
             return res
         
         #add a bit of resistance if we're close to a cell
-        if self._isCellAtPos(pipettePos[0], pipettePos[1]):
+        if self.isCellAtPos((pipettePos[0], pipettePos[1])):
             res += 0.1e6 * (20 - distFromSlip)
 
             if self.pressure.get_pressure() <= 0 and random.random() < 0.01: #1% chance of gigaseal per frame
                 #gigaseal!
                 self.pipette_state = PipetteState.TIP_SEALED
+                self.tau = np.random.uniform(self.tau_range[0], self.tau_range[1])
+                self.axis_resistance = np.random.uniform(self.axis_resistance_range[0], self.axis_resistance_range[1])
+                self.seal_location = pipettePos.copy()
                 print('PIPETTE SEALED!')
 
         return res
+    
+
+    def getResistancePeak(self):
+        '''Get a axis ("peak") resistance for the pipette / system (in Ohms)
+        '''
+        if self.pipette_state == PipetteState.TIP_BROKEN_IN:
+            return self.axis_resistance
+        elif self.pipette_state == PipetteState.TIP_SEALED:
+            return self.getResistance() * 0.2
+        else:
+            return self.getResistance()
         
     def _standardPipetteResistance(self):
         '''The resistance of the pipette without any cells
@@ -106,6 +138,8 @@ class WorldModel():
             return self.crashedResistance + np.random.random() * self.pipetteResistanceNoise
         elif self.isSealed():
             return self.sealedResistance + np.random.random() * self.pipetteResistanceNoise
+        elif self.isBrokenIn():
+            return self.brokenInResistance + np.random.random() * self.pipetteResistanceNoise
         elif self.pipette_state == PipetteState.TIP_CLOGGED:
             return self.normalResistance * 1.25 + np.random.random() * self.pipetteResistanceNoise
         else:
@@ -126,8 +160,9 @@ class WorldModel():
     def isCellAtPos(self, pipette_pos, screen_size=[1024, 1024]):
 
         #get pipette micron coords
-        pipette_x, pipette_y, pipette_z = pipette_pos
-        pipette_pos = np.array([pipette_x, pipette_y, pipette_z]) #already in stage coords because this sim uses identity matrix for stage_to_pipette
+        pipette_x = pipette_pos[0]
+        pipette_y = pipette_pos[1]
+        pipette_pos = np.array([pipette_x, pipette_y]) #already in stage coords because this sim uses identity matrix for stage_to_pipette
 
         #get pipette position in image coordinates
         pipette_pos_img_coords = pipette_pos * self.pixels_per_micron
@@ -141,10 +176,10 @@ class WorldModel():
         pipette_img_y = pipette_img_y % self.annotations.shape[0]
 
         #account for negatives
-        if pipette_img_x < 0:
-            pipette_img_x = self.annotations.shape[1] + pipette_img_x 
-        if pipette_img_y < 0:
-            pipette_img_y = self.annotations.shape[0] + pipette_img_y
+        while pipette_img_x < 0:
+            pipette_img_x = screen_size[1] + pipette_img_x 
+        while pipette_img_y < 0:
+            pipette_img_y = screen_size[0] + pipette_img_y
 
         return self._isCellAtPos(pipette_img_x, pipette_img_y)
 
@@ -170,9 +205,6 @@ class FakeCalCamera(Camera):
         #setup frame image (numpy because of easy rolling)
         self.frame = cv2.imread(curFile + "/FakeMicroscopeImgs/background.png", cv2.IMREAD_GRAYSCALE)
         self.frame = cv2.resize(self.frame, dsize=(self.width * 2, self.height * 2), interpolation=cv2.INTER_NEAREST)
-
-        #write normalized image to file
-        cv2.imwrite(curFile + "/FakeMicroscopeImgs/background_normalized.png", self.frame)
 
         self.last_img = None
         self.last_stage_pos = None

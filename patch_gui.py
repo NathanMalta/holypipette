@@ -1,12 +1,12 @@
 import sys
 
 import traceback
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, QtCore
 
 from holypipette.log_utils import console_logger
 from holypipette.interface import AutoPatchInterface
 from holypipette.interface.pipettes import PipetteInterface
-from holypipette.gui import PatchGui, EPhysGraph
+from holypipette.gui import PatchGui, EPhysGraph, Tutorial
 
 from setup_fake_rig import *
 
@@ -22,6 +22,10 @@ graphs.show()
 
 gui.initialize()
 gui.show()
-ret = app.exec_()
 
+tutorial = Tutorial()
+tutorial.raise_()
+tutorial.show()
+
+ret = app.exec_()
 sys.exit(ret)

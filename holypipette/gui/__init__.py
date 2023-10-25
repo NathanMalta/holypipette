@@ -4,3 +4,4 @@ from .camera import *
 from .manipulator import *
 from .patch import *
 from .graph import *
+from .tutorial import *
