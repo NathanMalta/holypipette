@@ -62,32 +62,24 @@ class PatchGui(ManipulatorGui):
 
             self.xbox_controller = XboxController()
 
-            def a_pressed(status):
-                if status:
-                    print('A pressed')
-                else:
-                    print('A released')
-
             self.register_controller_actions()
-
-            self.xbox_controller.link_button(Button.A_BUTTON, a_pressed)
         else:
             self.set_status_message('Controller Status', 'Controller Not Connected')
 
 
     def register_controller_actions(self):
-        self.xbox_controller.link_axis(Axis.LEFT_X, lambda x: self.pipette_interface.move_stage_horizontal(x * 10))
-        self.xbox_controller.link_axis(Axis.LEFT_Y, lambda x: self.pipette_interface.move_stage_vertical(x * 10))
+        self.xbox_controller.link_axis(Axis.RIGHT_X, lambda x: self.pipette_interface.move_stage_horizontal(x * 10))
+        self.xbox_controller.link_axis(Axis.RIGHT_Y, lambda x: self.pipette_interface.move_stage_vertical(x * 10))
 
-        self.xbox_controller.link_axis(Axis.RIGHT_X, lambda x: self.pipette_interface.move_pipette_x(x * 10))
-        self.xbox_controller.link_axis(Axis.RIGHT_Y, lambda x: self.pipette_interface.move_pipette_y(x * 10))
+        self.xbox_controller.link_axis(Axis.LEFT_X, lambda x: self.pipette_interface.move_pipette_x(x * 10))
+        self.xbox_controller.link_axis(Axis.LEFT_Y, lambda x: self.pipette_interface.move_pipette_y(x * 10))
 
-        self.xbox_controller.link_button_hold(Button.DPAD_UP, lambda: self.pipette_interface.move_microscope(10))
-        self.xbox_controller.link_button_hold(Button.DPAD_DOWN, lambda: self.pipette_interface.move_microscope(-10))
+        self.xbox_controller.link_button_hold(Button.DPAD_UP, lambda: self.pipette_interface.move_pipette_z(5))
+        self.xbox_controller.link_button_hold(Button.DPAD_DOWN, lambda: self.pipette_interface.move_pipette_z(-5))
 
+        self.xbox_controller.link_button_hold(Button.Y_BUTTON, lambda: self.pipette_interface.move_microscope(5))
+        self.xbox_controller.link_button_hold(Button.A_BUTTON, lambda: self.pipette_interface.move_microscope(-5))
 
-        self.xbox_controller.link_axis(Axis.RIGHT_TRIGGER, lambda x: self.pipette_interface.move_pipette_z(x * 10))
-        self.xbox_controller.link_axis(Axis.LEFT_TRIGGER, lambda x: self.pipette_interface.move_pipette_z(x * -10))
 
     def display_pressure(self):
         pressure = self.patch_interface.pressure.get_pressure()

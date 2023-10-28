@@ -62,8 +62,8 @@ class PipetteInterface(TaskInterface):
         self.calibrated_unit.relative_move(1000, 2) #move the tip way up to simulate what'd you do replacing it
         self.calibrated_unit.wait_until_still()
         self.worldModel.replacePipette()
-        if currPos[2] < 0:
-            currPos[2] = 0 #make sure we don't crash on the way down
+        if currPos[2] < 50:
+            currPos[2] = 50 #make sure we don't crash on the way down
         self.calibrated_unit.absolute_move(currPos) #move it back to where it was
 
     
@@ -78,8 +78,8 @@ class PipetteInterface(TaskInterface):
         self.calibrated_unit.relative_move(1000, 2) #move the tip way up to simulate what'd you do replacing it
         self.calibrated_unit.wait_until_still()
         self.worldModel.cleanPipette()
-        if currPos[2] < 0:
-            currPos[2] = 0 #make sure we don't crash on the way down
+        if currPos[2] < 50:
+            currPos[2] = 50 #make sure we don't crash on the way down
         self.calibrated_unit.absolute_move(currPos) #move it back to where it was
 
     

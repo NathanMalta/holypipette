@@ -54,12 +54,14 @@ class AutoPatchInterface(TaskInterface):
     '''
     A class to run automatic patch-clamp
     '''
-    def __init__(self, amplifier, pressure, pipette_interface):
+    def __init__(self, amplifier, pressure, pipette_interface, worldModel):
         super(AutoPatchInterface, self).__init__()
         self.config = PatchConfig(name='Patch')
         self.amplifier = amplifier
         self.pressure = pressure
         self.pipette_controller = pipette_interface
+        self.worldModel = worldModel
+
         autopatcher = AutoPatcher(amplifier, pressure, self.pipette_controller.calibrated_unit,
                                     self.pipette_controller.calibrated_unit.microscope,
                                     calibrated_stage=self.pipette_controller.calibrated_stage,
@@ -78,6 +80,7 @@ class AutoPatchInterface(TaskInterface):
     @blocking_command(category='Patch', description='Break into the cell',
                       task_description='Breaking into the cell')
     def break_in(self):
+        self.worldModel.logPressureBreakIn()
         self.execute(self.current_autopatcher.break_in)
 
     def start_selecting_cells(self):
@@ -86,18 +89,6 @@ class AutoPatchInterface(TaskInterface):
     def remove_last_cell(self):
         if len(self.cells_to_patch) > 0:
             self.cells_to_patch = self.cells_to_patch[:-1]
-
-    @blocking_command(category='Cell Sorter',
-            description='Move the cell sorter to a cell',
-            task_description='Move the cell sorter to a cell')
-    def move_cellsorter_to_cell(self):
-        #grab cell from list
-        cellx = self.cells_to_patch[0][0]
-        celly = self.cells_to_patch[0][1]
-        cellz = self.pipette_controller.calibrated_unit.microscope.floor_Z
-
-        #move cell sorter to cell
-        self.execute(self.pipette_controller.calibrated_cellsorter.center_cellsorter_on_point, argument=[cellx, celly, cellz])
 
     @command(category='Patch', description='Add a mouse position to the list of cells to patch')
     def add_cell(self, position):
@@ -146,8 +137,10 @@ class AutoPatchInterface(TaskInterface):
         '''puts the pipette under positive pressure to prevent blockages
         '''
         self.pressure.set_pressure(self.config.pressure_near)
+        self.worldModel.logPressureAmbient()
 
     def set_pressure_sealing(self):
         '''puts a slight negative pressure to gigaseal the cell
         '''
         self.pressure.set_pressure(self.config.pressure_sealing)
+        self.worldModel.logPressureSealing()

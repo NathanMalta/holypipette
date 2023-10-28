@@ -15,7 +15,7 @@ pipetteManip = FakeManipulator(min=[-1000, -1000, -50],
                                       max=[4000, 20000, 20000])
 stage = ManipulatorUnit(controller, [1, 2])
 
-pipetteManip.x = [200, 300, 400] # start with pipette in frame
+pipetteManip.x = [200, 300, 125] # start with pipette in frame
 controller.x = [0, 0, 0]
 
 pressure = FakePressureController()

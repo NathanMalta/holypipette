@@ -14,9 +14,10 @@ from enum import Enum
 class PipetteState(Enum):
     TIP_NORMAL = 0
     TIP_BROKEN = 1
-    TIP_SEALED = 2
-    TIP_CLOGGED = 3
-    TIP_BROKEN_IN = 4
+    TIP_SEALING = 2
+    TIP_SEALED = 3
+    TIP_CLOGGED = 4
+    TIP_BROKEN_IN = 5
 
 
 class WorldModel():
@@ -35,8 +36,6 @@ class WorldModel():
         self._setupPipetteResistances()
         self.pipetteResistanceNoise = 0.1e6 #0.1 Mohm
 
-        self.nearCellAddition = 0
-
         self.tau_range = [5 * 1e-3, 10 * 1e-3] #valid tau range
         self.tau = np.random.uniform(self.tau_range[0], self.tau_range[1])
 
@@ -44,6 +43,11 @@ class WorldModel():
         self.axis_resistance = np.random.uniform(self.axis_resistance_range[0], self.axis_resistance_range[1])
 
         self.seal_location = None
+        self.seal_time = None
+        self.time_to_seal = 5 #seconds
+        self.is_near_cell = False
+
+        self.telemetry = Telemetry()
     
     def _setupPipetteResistances(self):
         self.normalResistance = np.random.randint(4e6, 7e6) #4-7 Mohm
@@ -59,17 +63,29 @@ class WorldModel():
     
     def isBrokenIn(self):
         return self.pipette_state == PipetteState.TIP_BROKEN_IN
+    
+    def logPressureAmbient(self):
+        self.telemetry.logEvent(TelemetryEvent.PRESSURE_AMBIENT)
+
+    def logPressureSealing(self):
+        self.telemetry.logEvent(TelemetryEvent.PRESSURE_SEALING)
+
+    def logPressureBreakIn(self):
+        self.telemetry.logEvent(TelemetryEvent.PRESSURE_BREAK_IN)
         
     def replacePipette(self):
         self._setupPipetteResistances() #new pipette, new resistances!
+        self.telemetry.logEvent(TelemetryEvent.PIPETTE_REPLACED)
         self.pipette_state = PipetteState.TIP_NORMAL
         print('PIPETTE NORMAL!')
     
     def breakPipette(self):
+        self.telemetry.logEvent(TelemetryEvent.PIPETTE_BROKEN)
         self.pipette_state = PipetteState.TIP_BROKEN
         print('PIPETTE BROKEN!')
 
     def cleanPipette(self):
+        self.telemetry.logEvent(TelemetryEvent.PIPETTE_CLEANED)
         if self.pipette_state == PipetteState.TIP_CLOGGED:
             self.pipette_state = PipetteState.TIP_NORMAL
             print('PIPETTE CLEANED!')
@@ -88,17 +104,30 @@ class WorldModel():
         pipettePos = self.pipette.position()
         distFromSlip = pipettePos[2]
 
-        if self.pipette_state == PipetteState.TIP_SEALED or self.pipette_state == PipetteState.TIP_BROKEN_IN:
+        if self.pipette_state == PipetteState.TIP_SEALED or self.pipette_state == PipetteState.TIP_SEALING or self.pipette_state == PipetteState.TIP_BROKEN_IN:
             seal_dist = np.linalg.norm(np.array(self.seal_location) - np.array(pipettePos))
             if distFromSlip > 20 or self.pressure.get_pressure() > 10 or seal_dist > 20:
                 #moved too far away from the cell, lose seal
                 self.pipette_state = PipetteState.TIP_CLOGGED
+                self.telemetry.logEvent(TelemetryEvent.PIPETTE_CLOGGED)
                 print('PIPETTE CLOGGED!')
             
-            if self.pressure.get_pressure() < -190 and self.pipette_state == PipetteState.TIP_SEALED:
+            if self.pressure.get_pressure() < -90 and self.pipette_state == PipetteState.TIP_SEALED:
                 #break in
                 self.pipette_state = PipetteState.TIP_BROKEN_IN
+                self.telemetry.logEvent(TelemetryEvent.BROKEN_IN)
                 print('BREAK IN!')
+            
+            if self.pipette_state == PipetteState.TIP_SEALING:
+                #we're in the process of sealing
+                if time.time() - self.seal_time > self.time_to_seal:
+                    self.pipette_state = PipetteState.TIP_SEALED
+                    self.telemetry.logEvent(TelemetryEvent.GIGASEAL)
+                    self.seal_time = None
+                    print('SEALED!')
+                    return self._standardPipetteResistance()
+            elif self.seal_time is not None:
+                self.seal_time = None
 
             return res
 
@@ -110,16 +139,24 @@ class WorldModel():
         if self.isCellAtPos((pipettePos[0], pipettePos[1])):
             res += 0.1e6 * (20 - distFromSlip)
 
-            if self.pressure.get_pressure() <= 0 and random.random() < 0.01: #1% chance of gigaseal per frame
-                #gigaseal!
-                self.pipette_state = PipetteState.TIP_SEALED
+            if not self.is_near_cell:
+                self.is_near_cell = True
+                self.telemetry.logEvent(TelemetryEvent.CELL_APPROACHED)
+                print('NEAR CELL!')
+
+            if self.pressure.get_pressure() <= 0 and random.random() < 0.05: #5% chance of gigaseal per frame
+                #gigaseal
                 self.tau = np.random.uniform(self.tau_range[0], self.tau_range[1])
                 self.axis_resistance = np.random.uniform(self.axis_resistance_range[0], self.axis_resistance_range[1])
                 self.seal_location = pipettePos.copy()
-                print('PIPETTE SEALED!')
+                self.seal_time = time.time()
+                self.pipette_state = PipetteState.TIP_SEALING
+                print('Sealing to Cell!')
+        
+        else:
+            self.is_near_cell = False
 
         return res
-    
 
     def getResistancePeak(self):
         '''Get a axis ("peak") resistance for the pipette / system (in Ohms)
@@ -142,6 +179,11 @@ class WorldModel():
             return self.brokenInResistance + np.random.random() * self.pipetteResistanceNoise
         elif self.pipette_state == PipetteState.TIP_CLOGGED:
             return self.normalResistance * 1.25 + np.random.random() * self.pipetteResistanceNoise
+        elif self.pipette_state == PipetteState.TIP_SEALING:
+            #ramp up resistance as we seal
+            percent_sealed = (time.time() - self.seal_time) / self.time_to_seal
+            return self.normalResistance * 3 + 0.5 * 1e9 * percent_sealed**2 + np.random.random() * self.pipetteResistanceNoise
+
         else:
             return self.normalResistance + np.random.random() * self.pipetteResistanceNoise
 
@@ -184,6 +226,32 @@ class WorldModel():
         return self._isCellAtPos(pipette_img_x, pipette_img_y)
 
 
+class TelemetryEvent(Enum):
+    PIPETTE_CLEANED = 'pipette_cleaned'
+    PIPETTE_REPLACED = 'pipette_replaced'
+
+    PIPETTE_BROKEN = 'pipette_broken'
+    PIPETTE_CLOGGED = 'pipette_clogged'
+    
+    GIGASEAL = 'gigaseal'
+    BROKEN_IN = 'break-in'
+
+    PRESSURE_AMBIENT = 'pressure_ambient'
+    PRESSURE_SEALING = 'pressure_sealing'
+    PRESSURE_BREAK_IN = 'pressure_break-in'
+
+    CELL_APPROACHED = 'cell_approach'
+
+class Telemetry():
+    def __init__(self):
+        time_str = time.strftime("%Y%m%d-%H%M%S")
+        self.fileName = "telemetry/telemetry_" + time_str + ".csv"
+        self.initTime = time.time()
+
+    def logEvent(self, event:TelemetryEvent):
+        time_since_init = time.time() - self.initTime
+        with open(self.fileName, 'a') as f:
+            f.write(f'{time_since_init}, {event.value}\n')
 
 class FakeCalCamera(Camera):
     def __init__(self, stageManip=None, pipetteManip=None, image_z=0, targetFramerate=40, worldModel=None):
@@ -293,8 +361,6 @@ class FakeCalCamera(Camera):
         if dt < (1/self.targetFramerate):
             time.sleep((1/self.targetFramerate) - dt)
 
-        # print(f'fps: {1/(time.time() - start)}')
-        
         return frame
     
 class FakePipette():

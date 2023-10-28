@@ -120,11 +120,40 @@ class Tutorial(QWidget):
     def _createPatchingBasicsPage(self):
         self.basicsPage = QWidget()
         self.basicsPage.layout = QVBoxLayout(self.basicsPage)
-        self.basicsPage.label = QLabel(self.basicsPage)
-        self.basicsPage.label.setText("This is the basics page.")
-        self.basicsPage.label.setWordWrap(True)
-        self.basicsPage.label.setAlignment(QtCore.Qt.AlignCenter)
-        self.basicsPage.layout.addWidget(self.basicsPage.label)
+
+        text_browser = QTextBrowser(self)
+        self.basicsPage.layout.addWidget(text_browser)
+
+        bulleted_list = """
+        <style>
+        /* Fix list spacing and appearance */
+        ul {
+            line-height: 1.15;
+        }
+        li {
+            margin-bottom: 5px;
+        }
+        </style>
+
+        <p style="font-size: 20px;">
+            Patch Clamping is a powerful technique that allows us to measure the electrical properties of individual cells.
+
+            The main idea is to use a glass micropipette containing an electrode to form a seal with the cell membrane, and then break through the membrane to measure the current flowing across it.
+
+            At a high level, here are the main steps:
+        </p>
+
+        <ul style="font-size: 20px;">
+            <li><strong>Approaching the Cell:</strong> We keep a positive +20mbar in the pipette to prevent clogs, and move the pipette close (10-20um) 
+            from the cell we'd like to patch.  At this point, resistance should increase slightly as the cell membrane touches the pipette tip.   During this phase, there should be a sharp squarewave resistance curve (top graph of the simulator)</li>
+            <li><strong>Forming a Gigaseal:</strong>  We then create a slight negative pressure (0 to -50 mbar) to pull a portion of the cell membrane to fully block the pipette.  This creates a Giga-Ohm level resistance (a "Gigaseal") as the pipette tip is almost entirely blocked.</li>
+            <li><strong>Breaking in:</strong>  We use a series of higher pressure pulses (a few hundred mbar) to break through the membrane.  After breaking through, we see a total resistance of a few hundred Ohm and a characteristic "spiked" current response with a first order decay.</li>
+        </ul>
+        <br>
+        """
+        text_browser.setHtml(bulleted_list)
+
+        self.basicsPage.layout.addWidget(text_browser)
         self.tabs.addTab(self.basicsPage, "Patching Basics")
 
     def _createManualPatchingPage(self):
@@ -161,7 +190,7 @@ class Tutorial(QWidget):
             <li>Click <strong>Gigaseal Pressure</strong> to create a slight negative pressure</li>
             <li>After a few seconds, resistance should spike to over a Giga-Ohm.  Now click <strong> Break-In Pressure</li> to get through the membrane</li>
             <li>Resistance should drop to a few hundred Mega-Ohms and you should see the characteristic current response.</li>
-            <li>After observing the response, you can raise the pipette and click <strong>Clean Pipette</strong> to get the pipette ready to patch again.</li>
+            <li>After observing the response, you can raise the pipette slightly and click <strong>Ambient Pressure</strong> and <strong>Clean Pipette</strong> to get the pipette ready to patch again.</li>
         </ul>
         <br>
 
@@ -213,11 +242,32 @@ class Tutorial(QWidget):
         #create tutorial page
         self.pitfallsPage = QWidget()
         self.pitfallsPage.layout = QVBoxLayout(self.pitfallsPage)
-        self.pitfallsPage.label = QLabel(self.pitfallsPage)
-        self.pitfallsPage.label.setText("This is the pitfalls page.")
-        self.pitfallsPage.label.setWordWrap(True)
-        self.pitfallsPage.label.setAlignment(QtCore.Qt.AlignCenter)
-        self.pitfallsPage.layout.addWidget(self.pitfallsPage.label)
+        text_browser = QTextBrowser(self)
+
+        # Create a string with a bulleted list using HTML tags
+        bulleted_list = """        
+        <style>
+        /* Fix list spacing and appearance */
+        ul {
+            line-height: 1.15;
+        }
+        li {
+            margin-bottom: 5px;
+        }
+        </style>
+        <p style="font-size: 20px;">
+            To emulate problems that can arrise in real patching, we have implemented the following failure modes into the simulation:
+        </p>
+
+        <ul style="font-size: 20px;">
+            <li><strong>Pipette Clogging:</strong> After a patch, or if a pipette has negative pressure for too long when not attached to a cell, the pipette tip becomes clogged.  This can be fixed by cleaning or replacing the pipette.</li>
+            <li><strong>Pipette Tip Breaking:</strong> If a pipette is driven below cell plane (into the microscope's glass coverslip) the pipette will break, indicated by a blunted tip and a drop in resistance.  This can be fixed by replacing the pipette. </li>
+        </ul>
+        <br>
+
+        """
+        text_browser.setHtml(bulleted_list)
+        self.pitfallsPage.layout.addWidget(text_browser)
         self.tabs.addTab(self.pitfallsPage, "Pitfalls")
 
 
