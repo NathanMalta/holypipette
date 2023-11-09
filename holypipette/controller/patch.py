@@ -164,9 +164,6 @@ class AutoPatcher(TaskController):
         img = (img*255).astype(np.uint8)
         cell_img = (cell_img*255).astype(np.uint8)
 
-        cv2.imwrite('cell_img.png', cell_img)
-        cv2.imwrite('img.png', img)
-
         #find via template matching
         res = cv2.matchTemplate(img, cell_img, cv2.TM_CCOEFF_NORMED) 
         threshold = 0.8
