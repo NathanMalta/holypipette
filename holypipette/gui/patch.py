@@ -111,7 +111,7 @@ class ButtonTabWidget(QtWidgets.QWidget):
             #we're dealing with a function
             cmd()
 
-    def addPositionBox(self, name: str, layout, update_func, axes=['x', 'y', 'z']):
+    def addPositionBox(self, name: str, layout, update_func, tare_func=None, axes=['x', 'y', 'z']):
         #add a box for manipulator and stage positions
         box = QtWidgets.QGroupBox(name)
         row = QtWidgets.QHBoxLayout()
@@ -126,6 +126,12 @@ class ButtonTabWidget(QtWidgets.QWidget):
             self.pos_labels.append(label)
         box.setLayout(row)
         layout.addWidget(box)
+
+        if tare_func is not None:
+            #add a button to tare the manipulator
+            tare_button = QtWidgets.QPushButton('Tare')
+            tare_button.clicked.connect(lambda: tare_func())
+            row.addWidget(tare_button)
 
         #periodically update the position labels
         pos_timer = QtCore.QTimer()
@@ -177,8 +183,10 @@ class PatchButtons(ButtonTabWidget):
         layout = QtWidgets.QVBoxLayout()
         layout.setAlignment(Qt.AlignTop)
 
-        self.addPositionBox('stage position', layout, self.update_stage_pos_labels)
-        self.addPositionBox('pipette position', layout, self.update_pipette_pos_labels)
+        self.addPositionBox('stage position (um)', layout, self.update_stage_pos_labels, tare_func=self.tare_stage)
+        self.addPositionBox('pipette position (um)', layout, self.update_pipette_pos_labels, tare_func=self.tare_pipette)
+        self.init_stage_pos = None #used to store bootup positions so we can reset to them
+        self.init_pipette_pos = None
 
         #add a box for cal
         buttonList = [['Calibrate Stage','Set Cell Plane'], ['Add Pipette Cal Point', 'Finish Pipette Cal'], ['Save Calibration', 'Recalibrate Pipette']]
@@ -186,34 +194,60 @@ class PatchButtons(ButtonTabWidget):
         self.addButtonList('calibration', layout, buttonList, cmds)
 
         #add a box for movement
-        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Center Pipette'], ['Run protocol']]
-        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.pipette_interface.center_pipette], [self.patch_interface.run_current_protocol]]
+        buttonList = [[ 'Focus Cell Plane', 'Focus Pipette Plane'], ['Fix Backlash', 'Center Pipette'], ['Run protocol']]
+        cmds = [[self.pipette_interface.go_to_floor, self.pipette_interface.focus_pipette], [self.pipette_interface.fix_backlash, self.pipette_interface.center_pipette], [self.patch_interface.run_current_protocol]]
         self.addButtonList('movement', layout, buttonList, cmds)
 
         #add a box for patching cmds
-        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch', 'Break In'], ['Store Cleaning Position', 'Store Rinsing Position'], ['Clean Pipette']]
-        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch, self.patch_interface.break_in], [self.patch_interface.store_cleaning_position, self.patch_interface.store_rinsing_position], [self.patch_interface.clean_pipette]]
+        buttonList = [['Select Cell', 'Remove Last Cell'], ['Start Patch', 'Break In'], ['Store Cleaning Position'], ['Clean Pipette']]
+        cmds = [[self.patch_interface.start_selecting_cells, self.patch_interface.remove_last_cell], [self.patch_interface.patch, self.patch_interface.break_in], [self.patch_interface.store_cleaning_position], [self.patch_interface.clean_pipette]]
         self.addButtonList('patching', layout, buttonList, cmds)
+
+        #add a box for Lumencor LED control
+        buttonList = [['None'], ['Violet', 'Blue'], ['Cyan', 'Yellow'], ['Red', 'Near Infrared']]
+        cmds = [[self.do_nothing], [self.do_nothing, self.do_nothing], [self.do_nothing, self.do_nothing], [self.do_nothing, self.do_nothing]]
+        self.addButtonList('Lumencor LED', layout, buttonList, cmds)
         
         self.setLayout(layout)
+
+    def tare_pipette(self):
+        currPos = self.pipette_interface.calibrated_unit.unit.position()
+        self.init_pipette_pos = currPos
 
     def update_pipette_pos_labels(self, indicies):
         #update the position labels
         currPos = self.pipette_interface.calibrated_unit.unit.position()
+        if self.init_pipette_pos is None:
+            self.init_pipette_pos = currPos
+        currPos = currPos - self.init_pipette_pos
+
         for i, ind in enumerate(indicies):
             label = self.pos_labels[ind]
             label.setText(f'{label.text().split(":")[0]}: {currPos[i]:.2f}')
+
+    def tare_stage(self):
+        xyPos = self.pipette_interface.calibrated_stage.position()
+        zPos = self.pipette_interface.microscope.position()
+        self.init_stage_pos = np.array([xyPos[0], xyPos[1], zPos])
+
 
     def update_stage_pos_labels(self, indicies):
         #update the position labels
         xyPos = self.pipette_interface.calibrated_stage.position()
         zPos = self.pipette_interface.microscope.position()
+
+        if self.init_stage_pos is None:
+            self.init_stage_pos = np.array([xyPos[0], xyPos[1], zPos])
+        xyPos = xyPos - self.init_stage_pos[0:2]
+        zPos = zPos - self.init_stage_pos[2]
+
         for i, ind in enumerate(indicies):
             label = self.pos_labels[ind]
             if i < 2:
                 label.setText(f'{label.text().split(":")[0]}: {xyPos[i]:.2f}')
             else:
-                label.setText(f'{label.text().split(":")[0]}: {zPos:.2f}')
+                #note: divide by 5 here to account for z-axis gear ratio
+                label.setText(f'{label.text().split(":")[0]}: {zPos/5:.2f}') 
 
 
 class CellSorterButtons(ButtonTabWidget):

@@ -49,7 +49,7 @@ class Manipulator(TaskController):
     def recover_state(self):
         self.absolute_move(self.saved_state)
 
-    def absolute_move(self, x, axis=None):
+    def absolute_move(self, x, axis=None, speed=None):
         '''
         Moves the device axis to position x.
 
@@ -60,7 +60,7 @@ class Manipulator(TaskController):
         '''
         pass
 
-    def relative_move(self, x, axis):
+    def relative_move(self, x, axis, speed=None):
         '''
         Moves the device axis by relative amount x in um.
 
@@ -69,7 +69,10 @@ class Manipulator(TaskController):
         axis: axis number
         x : position shift in um.
         '''
-        self.absolute_move(self.position(axis)+x, axis)
+        if speed is not None:
+            self.absolute_move(self.position(axis)+x, axis, speed)
+        else:
+            self.absolute_move(self.position(axis)+x, axis)
 
     def position_group(self, axes):
         '''

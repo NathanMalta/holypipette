@@ -45,7 +45,7 @@ class ManipulatorUnit(Manipulator):
         else:
             return self.dev.position(self.axes[axis])
 
-    def absolute_move(self, x, axis = None, blocking=False):
+    def absolute_move(self, x, axis = None, blocking=False, speed=None):
         '''
         Moves the device axis to position x in um.
 
@@ -58,21 +58,21 @@ class ManipulatorUnit(Manipulator):
             # then we move all axes
             if blocking:
                 for i, axis in enumerate(self.axes):
-                    self.dev.absolute_move(x[i], axis)
+                    self.dev.absolute_move(x[i], axis, speed)
                     self.dev.wait_until_still([axis])
             else:
-                self.dev.absolute_move_group(x, self.axes)
+                self.dev.absolute_move_group(x, self.axes, speed)
         else:
-            self.dev.absolute_move(x, self.axes[axis])
+            self.dev.absolute_move(x, self.axes[axis], speed)
             if blocking:
                 self.dev.wait_until_still([self.axes[axis]])
         self.sleep(.05)
 
-    def absolute_move_group(self, x, axes):
-        self.dev.absolute_move_group(x, np.array(self.axes)[axes])
+    def absolute_move_group(self, x, axes, speed=None):
+        self.dev.absolute_move_group(x, np.array(self.axes)[axes], speed)
         self.sleep(.05)
 
-    def relative_move(self, x, axis = None):
+    def relative_move(self, x, axis = None, speed=None):
         '''
         Moves the device axis by relative amount x in um.
 
@@ -82,9 +82,9 @@ class ManipulatorUnit(Manipulator):
         x : position shift in um.
         '''
         if axis is None:
-            self.dev.relative_move_group(x, self.axes)
+            self.dev.relative_move_group(x, self.axes, speed)
         else:
-            self.dev.relative_move(x, self.axes[axis])
+            self.dev.relative_move(x, self.axes[axis], speed)
         self.sleep(.05)
 
     def stop(self, axis = None):

@@ -60,6 +60,20 @@ class Microscope(Manipulator):
         self.dev.absolute_move(x, self.axis)
         self.sleep(.05)
 
+
+    def move_to_floor(self):
+        self.dev.absolute_move(self.floor_Z + 200, self.axis)
+        self.dev.wait_until_still([self.axis])
+        self.dev.absolute_move(self.floor_Z, self.axis)
+        self.dev.wait_until_still([self.axis])
+
+    def fix_backlash(self):
+        curr_pos = self.position()
+        self.absolute_move(curr_pos + 200)
+        self.wait_until_still()
+        self.absolute_move(curr_pos)
+        self.wait_until_still()
+
     def relative_move(self, x):
         '''
         Moves the device axis by relative amount x in um.

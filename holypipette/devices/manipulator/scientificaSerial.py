@@ -241,7 +241,7 @@ class ScientificaSerialNoEncoder(Manipulator):
             if sleepTime > 0:
                 time.sleep(sleepTime)
 
-    def absolute_move(self, pos, axis):
+    def absolute_move(self, pos, axis, speed=None):
         if axis == 1:
             yPos = self.position(axis=2)
             self._sendCmd(SerialCommands.SET_X_Y_POS_ABS.format(int(pos * 10) , int(yPos * 10)))
@@ -251,7 +251,7 @@ class ScientificaSerialNoEncoder(Manipulator):
         if axis == 3:
             self._sendCmd(SerialCommands.SET_Z_POS.format(int(pos * 10)))
     
-    def absolute_move_group(self, x, axes):
+    def absolute_move_group(self, x, axes, speed=None):
         x = list(x)
         axes = list(axes)
         if 1 in axes and 2 in axes:
@@ -262,7 +262,7 @@ class ScientificaSerialNoEncoder(Manipulator):
         else:
             print(f'unimplemented move group {x} {axes}')
     
-    def relative_move_group(self, pos, axis):
+    def relative_move_group(self, pos, axis, speed=None):
         if axis == 1:
             self._sendCmd(SerialCommands.SET_X_Y_POS_REL.format(pos, 0))
         if axis == 2:
@@ -271,7 +271,7 @@ class ScientificaSerialNoEncoder(Manipulator):
             absZCmd = self.position(3) + pos
             self.absolute_move(absZCmd, 3)
 
-    def relative_move_group(self, x, axes):
+    def relative_move_group(self, x, axes, speed=None):
         cmd = [0, 0, 0]
         for pos, axis in zip(x, axes):
             cmd[axis  - 1] = pos

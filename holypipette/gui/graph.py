@@ -124,6 +124,11 @@ class EPhysGraph(QWidget):
         layout.addWidget(self.pressurePlot)
         layout.addWidget(self.resistancePlot)
 
+        #make resistance plot show current resistance in text
+        self.resistanceLabel = QLabel()
+        self.resistanceLabel.setText("Resistance: ")
+        layout.addWidget(self.resistanceLabel)
+
         self.setLayout(layout)
         
         self.updateTimer = QtCore.QTimer()
@@ -150,6 +155,7 @@ class EPhysGraph(QWidget):
             self.lastestDaqData, resistance = self.daq.getDataFromSquareWave(10, 50000, 0.5, 0.5, 0.25)
             if resistance is not None:
                 self.resistanceDeque.append(resistance)
+                self.resistanceLabel.setText("Resistance: {:.2f} MOhms".format(resistance / 1e6))
 
     def update_plot(self):
         #update current graph

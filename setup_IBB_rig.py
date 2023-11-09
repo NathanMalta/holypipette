@@ -37,10 +37,10 @@ controllerSerial = serial.Serial('COM12', 115200, timeout=2, parity=serial.PARIT
                                     bytesize=8, write_timeout=1, inter_byte_timeout=2)
 cellSorterController = CellSorterController(controllerSerial)
 
-manipulatorSerial = serial.Serial('COM10', 57600, timeout=2, parity=serial.PARITY_NONE, stopbits=2, 
-                                            bytesize=8, write_timeout=1, inter_byte_timeout=2)
-cellSorterManip = CellSorterManip(manipulatorSerial)
+# manipulatorSerial = serial.Serial('COM10', 57600, timeout=2, parity=serial.PARITY_NONE, stopbits=2, 
+#                                             bytesize=8, write_timeout=1, inter_byte_timeout=2)
+# cellSorterManip = CellSorterManip(manipulatorSerial)
 
 lampCom = serial.Serial('COM6', 9600, timeout=1, stopbits=serial.STOPBITS_ONE, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
 lumencore = Lumencore(lampCom)
-# cellSorterManip = FakeCellSorterManip()
+cellSorterManip = FakeCellSorterManip()

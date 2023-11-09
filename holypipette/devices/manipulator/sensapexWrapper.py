@@ -23,7 +23,7 @@ class SensapexManip(Manipulator):
             self.deviceID = deviceID
 
         self.max_speed = 5000 # "feels good" default value
-        self.max_acceleration = 20 # "feels good" default value
+        self.max_acceleration = 1 # "feels good" default value
         self.armAngle = math.radians(-self._get_axis_angle())
 
     def position(self, axis=None):
@@ -36,7 +36,7 @@ class SensapexManip(Manipulator):
     def raw_position(self, axis=None):
         return self.ump.get_pos(self.deviceID, timeout=1)
 
-    def absolute_move(self, x, axis):
+    def absolute_move(self, x, axis, speed=None):
         setpoint = np.nan * np.ones(3)
         if axis is not None:
             setpoint[axis-1] = x
@@ -44,16 +44,19 @@ class SensapexManip(Manipulator):
             setpoint = x
 
         print("moving to: {}".format(setpoint))
+        speed = self.max_speed if speed is None else speed
 
-        self.ump.goto_pos(self.deviceID, setpoint, self.max_speed, max_acceleration=self.max_acceleration, linear=True)
+        self.ump.goto_pos(self.deviceID, setpoint, speed, max_acceleration=self.max_acceleration, linear=True)
 
 
-    def absolute_move_group(self, x, axes):
+    def absolute_move_group(self, x, axes, speed=None):
         setpoint = np.nan * np.ones(3)
         for axis in axes:
             setpoint[axis-1] = x[axis-1]
+        
+        speed = self.max_speed if speed is None else speed
 
-        self.ump.goto_pos(self.deviceID, setpoint, self.max_speed, max_acceleration=self.max_acceleration, linear=True)
+        self.ump.goto_pos(self.deviceID, setpoint, speed, max_acceleration=self.max_acceleration, linear=True)
 
         
     def stop(self, axis):
