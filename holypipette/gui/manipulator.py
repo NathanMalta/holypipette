@@ -139,16 +139,16 @@ class ManipulatorGui(CameraGui):
                                          argument=distance, default_doc=False)
                 self.register_key_action(Qt.Key_W, modifier,
                                          self.interface.move_pipette_y,
-                                         argument=distance, default_doc=False)
+                                         argument=-distance, default_doc=False)
                 self.register_key_action(Qt.Key_S, modifier,
                                          self.interface.move_pipette_y,
-                                         argument=-distance, default_doc=False)
+                                         argument=distance, default_doc=False)
                 self.register_key_action(Qt.Key_A, modifier,
                                          self.interface.move_pipette_x,
-                                         argument=distance, default_doc=False)
+                                         argument=-distance, default_doc=False)
                 self.register_key_action(Qt.Key_D, modifier,
                                          self.interface.move_pipette_x,
-                                         argument=-distance, default_doc=False)
+                                         argument=distance, default_doc=False)
                 self.register_key_action(Qt.Key_Q, modifier,
                                          self.interface.move_pipette_z,
                                          argument=distance, default_doc=False)
