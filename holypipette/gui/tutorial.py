@@ -88,23 +88,23 @@ class Tutorial(QWidget):
         </style>
 
         <p style="font-size: 20px;">
-            The Stage is controlled using WASD and QE keys:
+            The Pipette is controlled using WASD and QE keys:
         </p>
 
         <ul style="font-size: 20px;">
-            <li>A / D: + / - Stage X</li>
-            <li>W / S: + / - Stage Y</li>
-            <li>Q / E: + / - Stage Z</li>
+            <li>A / D: + / - Pipette X</li>
+            <li>W / S: + / - Pipette Y</li>
+            <li>Q / E: + / - Pipette Z</li>
         </ul>
         <br>
 
         <p style="font-size: 20px;">
-        The Pipette is controlled using the arrow and page up/down keys:
+        The Stage is controlled using the arrow and page up/down keys:
         </p>
         <ul style="font-size: 20px;">
-            <li>Left / Right: + / - Pipette X</li>
-            <li>Up / Down: + / - Pipette Y</li>
-            <li>Page Up / Page Down: + / - Pipette Z</li>
+            <li>Left / Right: + / - Stage X</li>
+            <li>Up / Down: + / - Stage Y</li>
+            <li>Page Up / Page Down: + / - Stage Z</li>
         </ul>
         <br>
         <p style="font-size: 20px;">
