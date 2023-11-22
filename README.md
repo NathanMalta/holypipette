@@ -6,9 +6,11 @@ This is a video game to help teach the basics of whole-cell patch clamping, deve
 
 This project is based on [Holy Pipette](https://github.com/romainbrette/holypipette), a patch clamping automation project by [Romain Brette](https://scholar.google.com/citations?user=lEHiPU4AAAAJ&hl=en) and [Marcel Stimberg](https://scholar.google.com/citations?user=KJs3XswAAAAJ&hl=en).  A great thanks to them for their work and for making it open source!
 
-## Getting Started
+## Running from an exe file (Windows only)
 
-An all-in-one exe file for Windows users is coming soon. For now, either run the game from source code or check back soon!
+An all-in-one exe file for Windows users is available [here](https://github.com/NathanMalta/holypipette/releases/tag/exe-release).  Simply download "patch-game.exe" under the assets tab and run!
+
+## Running from Python Source Code (Windows, Mac, and Linux)
 
 ### Installing Dependencies
 
