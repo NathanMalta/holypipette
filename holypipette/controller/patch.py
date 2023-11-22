@@ -4,7 +4,6 @@ import numpy as np
 from holypipette.devices.amplifier.amplifier import Amplifier
 from holypipette.devices.manipulator.calibratedunit import CalibratedUnit
 from holypipette.devices.manipulator.microscope import Microscope
-from holypipette.devices.amplifier.DAQ import DAQ
 
 from holypipette.config import Config
 

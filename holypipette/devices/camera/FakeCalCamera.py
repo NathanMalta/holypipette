@@ -3,10 +3,11 @@ from holypipette.devices.pressurecontroller import PressureController
 from .camera import Camera
 import numpy as np
 import cv2
-from pathlib import Path
 import time
-import math
 import random
+import imageio
+import sys
+import os
 
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 from enum import Enum
@@ -28,8 +29,13 @@ class WorldModel():
         self.pipette_img_size = pipette_img_size
 
         # load cell annotations
-        curFile = str(Path(__file__).parent.absolute())
-        self.annotations = cv2.imread(curFile + "/FakeMicroscopeImgs/annotation.png", cv2.IMREAD_GRAYSCALE)
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            self.src_folder = sys._MEIPASS
+        except Exception:
+            self.src_folder = "holypipette/devices/camera/FakeMicroscopeImgs"
+
+        self.annotations = cv2.imread(self.src_folder + "/annotation.png", cv2.IMREAD_GRAYSCALE)
         self.pipette_state = PipetteState.TIP_NORMAL
 
         #setup pipette contants
@@ -47,13 +53,13 @@ class WorldModel():
         self.time_to_seal = 5 #seconds
         self.is_near_cell = False
 
-        self.telemetry = Telemetry()
+        self.telemetry = Telemetry(is_enabled=True) #disable for packaging into exe
     
     def _setupPipetteResistances(self):
-        self.normalResistance = np.random.randint(4e6, 7e6) #4-7 Mohm
-        self.crashedResistance = np.random.randint(0.3e6, 2e6) #0.3-2 Mohm
-        self.sealedResistance = np.random.randint(1e9, 2.5e9)
-        self.brokenInResistance = np.random.randint(50e6, 250e6) #50-250 Mohm
+        self.normalResistance = np.random.randint(4e6, 7e6, dtype=np.int64) #4-7 Mohm
+        self.crashedResistance = np.random.randint(0.3e6, 2e6, dtype=np.int64) #0.3-2 Mohm
+        self.sealedResistance = np.random.randint(1e9, 2.5e9, dtype=np.int64)
+        self.brokenInResistance = np.random.randint(50e6, 250e6, dtype=np.int64) #50-250 Mohm
 
     def isTipBroken(self):
         return self.pipette_state == PipetteState.TIP_BROKEN
@@ -243,12 +249,20 @@ class TelemetryEvent(Enum):
     CELL_APPROACHED = 'cell_approach'
 
 class Telemetry():
-    def __init__(self):
+    def __init__(self, is_enabled=True):
+        self.is_enabled = is_enabled
+
+        if not is_enabled:
+            return
+        
         time_str = time.strftime("%Y%m%d-%H%M%S")
         self.fileName = "telemetry/telemetry_" + time_str + ".csv"
         self.initTime = time.time()
 
     def logEvent(self, event:TelemetryEvent):
+        if not self.is_enabled:
+            return
+        
         time_since_init = time.time() - self.initTime
         with open(self.fileName, 'a') as f:
             f.write(f'{time_since_init}, {event.value}\n')
@@ -268,10 +282,14 @@ class FakeCalCamera(Camera):
         self.pipette = FakePipette(self.pipetteManip, self.pixels_per_micron, worldModel=self.worldModel)
         self.targetFramerate = targetFramerate
 
-        curFile = str(Path(__file__).parent.absolute())
-
         #setup frame image (numpy because of easy rolling)
-        self.frame = cv2.imread(curFile + "/FakeMicroscopeImgs/background.png", cv2.IMREAD_GRAYSCALE)
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            self.src_folder = sys._MEIPASS
+        except Exception:
+            self.src_folder = "holypipette/devices/camera/FakeMicroscopeImgs"
+
+        self.frame = cv2.imread(self.src_folder + "/background.png", cv2.IMREAD_GRAYSCALE)
         self.frame = cv2.resize(self.frame, dsize=(self.width * 2, self.height * 2), interpolation=cv2.INTER_NEAREST)
 
         self.last_img = None
@@ -379,10 +397,16 @@ class FakePipette():
         self.worldModel:WorldModel = worldModel
 
         #setup pipette image (PIL b/c of easy pasting)
-        curFile = str(Path(__file__).parent.absolute())
-        self.pipetteImg = Image.open(curFile + "/FakeMicroscopeImgs/pipette.png").convert("L")
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            self.src_folder = sys._MEIPASS
+        except Exception:
+            self.src_folder = "holypipette/devices/camera/FakeMicroscopeImgs"
+
+        self.pipetteImg = Image.open(self.src_folder + "/pipette.png").convert("L")
         self.pipetteImg, self.alphaMask = self._processPipetteImage(self.pipetteImg)
-        self.pipetteImageBroken, self.alphaMaskBroken = self._processPipetteImage(Image.open(curFile + "/FakeMicroscopeImgs/pipette_crashed.png").convert("L"))
+        self.pipetteImageBroken = Image.open(self.src_folder + "/pipette_crashed.png").convert("L")
+        self.pipetteImageBroken, self.alphaMaskBroken = self._processPipetteImage(self.pipetteImageBroken)
 
         
     

@@ -1,6 +1,5 @@
 import sys
 
-import traceback
 from PyQt5 import QtWidgets, QtCore
 
 from holypipette.log_utils import console_logger
@@ -27,5 +26,4 @@ tutorial = Tutorial()
 tutorial.raise_()
 tutorial.show()
 
-ret = app.exec_()
-sys.exit(ret)
+sys.exit(app.exec_())

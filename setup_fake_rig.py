@@ -3,7 +3,6 @@
 '''
 from holypipette.devices.amplifier.amplifier import FakeAmplifier
 from holypipette.devices.amplifier.DAQ import FakeDAQ
-from holypipette.devices.camera.pcocamera import PcoCamera
 from holypipette.devices.pressurecontroller import FakePressureController
 from holypipette.devices.camera.camera import FakeCamera
 from holypipette.devices.camera import FakeCalCamera, WorldModel
@@ -13,6 +12,7 @@ controller = FakeManipulator(min=[-1000, -1000, -1000],
                              max=[1000, 1000, 1000])
 pipetteManip = FakeManipulator(min=[-1000, -1000, -50],
                                       max=[4000, 20000, 20000])
+
 stage = ManipulatorUnit(controller, [1, 2])
 
 pipetteManip.x = [200, 300, 125] # start with pipette in frame

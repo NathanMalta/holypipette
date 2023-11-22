@@ -50,9 +50,9 @@ class PatchGui(ManipulatorGui):
         self.pressure_timer.start(100)
         self.patch_interface.set_pressure_ambient()
 
+
         # Setup controller (if available)
         pygame.init()
-        pygame.joystick.init()
         if pygame.joystick.get_count() > 0:
             self.set_status_message('Controller Status', 'Controller Connected')
 
@@ -65,7 +65,6 @@ class PatchGui(ManipulatorGui):
             self.register_controller_actions()
         else:
             self.set_status_message('Controller Status', 'Controller Not Connected')
-
 
     def register_controller_actions(self):
         self.xbox_controller.link_axis(Axis.RIGHT_X, lambda x: self.pipette_interface.move_stage_horizontal(x * 10))

@@ -1,11 +1,7 @@
-import logging
+import sys
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget, QTextBrowser
 from PyQt5 import QtCore, QtWidgets, QtGui
-
-import time
-import numpy as np
-from collections import deque
 
 __all__ = ["Tutorial"]
 
@@ -16,12 +12,18 @@ class Tutorial(QWidget):
     def __init__(self, parent=None):
         super().__init__()
 
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            self.src_folder = sys._MEIPASS
+        except Exception:
+            self.src_folder = "holypipette/gui/tutorial_media"
+
         #setup window
         self.setWindowTitle("Tutorial")
 
         #set fixed size
         self.setFixedSize(700, 700)
-
+        
         # self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
 
         #create layout with different tabpages
@@ -44,7 +46,6 @@ class Tutorial(QWidget):
         #add tab widget to layout
         self.layout.addWidget(self.tabs)
 
-
     def _createTabPages(self):
         #create tab pages
         self._createControlsPage()
@@ -61,7 +62,7 @@ class Tutorial(QWidget):
         self.xboxPage.layout = QVBoxLayout(self.xboxPage)
         #add image
         self.xboxPage.image = QLabel(self.xboxPage)
-        self.xboxPage.image.setPixmap(QtGui.QPixmap('holypipette/gui/tutorial_media/XBox.png'))
+        self.xboxPage.image.setPixmap(QtGui.QPixmap(self.src_folder + '/XBox.png'))
         self.xboxPage.image.setAlignment(QtCore.Qt.AlignCenter)
         self.xboxPage.layout.addWidget(self.xboxPage.image)
         self.xboxPage.image.setScaledContents(True)

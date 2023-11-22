@@ -104,7 +104,7 @@ class AcquisitionThread(threading.Thread):
         self.raw_queues = raw_queues
         self.running = True
 
-        threading.Thread.__init__(self, name='image_acquire_thread')
+        threading.Thread.__init__(self, name='image_acquire_thread', daemon=True)
 
     def run(self):
         self.running = True

@@ -7,5 +7,5 @@ docs/
 dist/
 *.egg-info/
 .DS_Store
-
-
+output
+telemetry/telemetry_*
