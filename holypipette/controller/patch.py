@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+import cv2
 from holypipette.devices.amplifier.amplifier import Amplifier
 from holypipette.devices.amplifier.DAQ import DAQ
 from holypipette.devices.manipulator.calibratedunit import CalibratedUnit
@@ -71,6 +72,8 @@ class AutoPatcher(TaskController):
         self.info("Successful break-in, R = " + str(self.daq.resistance() / 1e6))
 
     def _verify_resistance(self):
+        return #just for testing TODO: remove
+
         R = self.daq.resistance()
 
         if R < self.config.min_R:
@@ -95,7 +98,7 @@ class AutoPatcher(TaskController):
         r_delta = lastResDeque[2] - lastResDeque[0]
         return cellThreshold <= r_delta
 
-    def patch(self, cell_pos=None):
+    def patch(self, cell=None):
         '''
         Runs the automatic patch-clamp algorithm, including manipulator movements.
         '''
@@ -110,8 +113,10 @@ class AutoPatcher(TaskController):
         if self.microscope.floor_Z is None:
             raise AutopatchError("Cell Plane not set")
         
-        if cell_pos is None:
+        if cell is None:
             raise AutopatchError("No cell given to patch!")
+
+        cell_pos, cell_img = cell
         
         lastResDeque = collections.deque(maxlen=3)
 
@@ -128,11 +133,11 @@ class AutoPatcher(TaskController):
 
         # set amplifier to resistance mode
         R = self.daq.resistance()
-        lastResDeque.append(R)
+        # lastResDeque.append(R)
         self.debug("Resistance:" + str(R/1e6))
 
         #ensure good pipette (not broken or clogged)
-        self._verify_resistance()
+        # self._verify_resistance()
 
         #center stage on the cell we want to patch 
         self.calibrated_stage.safe_move(np.array([cell_pos[0], cell_pos[1], 0]))
@@ -146,20 +151,69 @@ class AutoPatcher(TaskController):
         self.microscope.wait_until_still()
 
         print('moved cell plane into focus!')
+
+        #get image
+        img = self.calibrated_unit.camera.get_16bit_image()
+
+        img_mins = np.min([np.min(img), np.min(cell_img)])
+        img_maxs = np.max([np.max(img), np.max(cell_img)])
+
+        img = (img - img_mins)/(img_maxs - img_mins)
+        cell_img = (cell_img - img_mins)/(img_maxs - img_mins)
+
+        img = (img*255).astype(np.uint8)
+        cell_img = (cell_img*255).astype(np.uint8)
+
+        #find via template matching
+        res = cv2.matchTemplate(img, cell_img, cv2.TM_CCOEFF_NORMED) 
+        threshold = 0.8
+
+        max_pos = np.unravel_index(np.argmax(res), res.shape)
+        max_val = np.max(res)
+
+        print(max_pos, max_val)
+
+        if max_val > threshold:
+            max_pos = (max_pos[0] + cell_img.shape[0] // 2, max_pos[0] + cell_img.shape[1] // 2)
+            self.calibrated_unit.camera.show_point(max_pos, color=(255, 0, 0), radius=15, duration=5)
+        else:
+            print('couldn\'t find cell in image!')
+
+        print('taking resistance readings...')
+        for i in range(3):
+            self.sleep(1)
+            R = self.daq.resistance()
+            lastResDeque.append(R)
+            print('resistance: {}'.format(R))
+
+        #move above cell plane (where we're about to move the pipette to)
+        self.microscope.absolute_move(self.microscope.floor_Z + self.config.cell_distance * 5)
+        self.microscope.wait_until_still()
+        self.microscope.fix_backlash()
+        print('moved pipette setpoint plane into focus!')
         self.sleep(1) #just for testing
 
-        #create a pipette setpoint in stage coordinates
-        cell_distance = self.calibrated_unit.um_to_pixels_relative(np.array([0, 0, -self.config.cell_distance]))
-        cell_distance = cell_distance[2]
-        pipette_setpoint = np.array([0, 0, self.microscope.position() + cell_distance])
-        print('moving pipette 30um above cell pos: ({})'.format(pipette_setpoint))
-        self.calibrated_unit.safe_move(pipette_setpoint, yolo_correction=False)
+        #move the pipette to the correct spot (config distance above the cell plane)
+        
+        self.calibrated_unit.safe_move(np.array([0, 0, self.microscope.position()]))
         self.calibrated_unit.wait_until_still()
+        print('moved pipette to cell plane!')
+
+
+        self.sleep(1) #just for testing
+
+        # #create a pipette setpoint in stage coordinates
+        # cell_distance = self.calibrated_unit.um_to_pixels_relative(np.array([0, 0, -self.config.cell_distance]))
+        # cell_distance = cell_distance[2]
+        # pipette_setpoint = np.array([0, 0, self.microscope.position() + cell_distance])
+        # print('moving pipette 30um above cell pos: ({})'.format(pipette_setpoint))
+        # self.calibrated_unit.safe_move(pipette_setpoint, yolo_correction=False)
+        # self.calibrated_unit.wait_until_still()
 
         # Check resistance again
         self._verify_resistance()
         R = self.daq.resistance()
-        lastResDeque.append(R)
+        # lastResDeque.append(R)
 
         # recal pipette offset in multiclamp
         self.amplifier.auto_pipette_offset()
@@ -174,7 +228,7 @@ class AutoPatcher(TaskController):
         cellFound = False
         for _ in range(int(self.config.max_distance)):  # move 15 um down
             # move by 1 um down
-            self.calibrated_unit.relative_move(1, axis=2)  # *calibrated_unit.up_position[2]
+            self.calibrated_unit.relative_move(1, axis=2, speed=100)  # *calibrated_unit.up_position[2]
             self.abort_if_requested()
             self.calibrated_unit.wait_until_still(2)
             self.sleep(1)

@@ -1,7 +1,7 @@
 import logging
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
-from PyQt5 import QtCore
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit
+from PyQt5 import QtCore, QtGui
 
 from pyqtgraph import PlotWidget, plot
 
@@ -124,6 +124,36 @@ class EPhysGraph(QWidget):
         layout.addWidget(self.pressurePlot)
         layout.addWidget(self.resistancePlot)
 
+        #make resistance plot show current resistance in text
+        self.bottomBar = QWidget()
+        self.bottomBarLayout = QHBoxLayout()
+        self.bottomBar.setLayout(self.bottomBarLayout)
+        
+        self.resistanceLabel = QLabel()
+        self.resistanceLabel.setText("Resistance: ")
+        self.bottomBarLayout.addWidget(self.resistanceLabel)
+
+        #make bottom bar height 20px
+        self.bottomBar.setMaximumHeight(20)
+        self.bottomBar.setMinimumHeight(20)
+        self.bottomBarLayout.setContentsMargins(0, 0, 0, 0)
+
+        #add a pressure label
+        self.pressureLabel = QLabel()
+        self.pressureLabel.setText("Pressure: ")
+        self.bottomBarLayout.addWidget(self.pressureLabel)
+        layout.addWidget(self.bottomBar)
+
+        #add pressure command box
+        self.pressureCommandBox = QLineEdit()
+        self.pressureCommandBox.setMaxLength(5)
+        self.pressureCommandBox.setFixedWidth(100)
+        self.pressureCommandBox.setValidator(QtGui.QIntValidator(-1000, 1000))
+        self.bottomBarLayout.addWidget(self.pressureCommandBox)
+
+        #add spacer to push everything to the left
+        self.bottomBarLayout.addStretch(1)
+
         self.setLayout(layout)
         
         self.updateTimer = QtCore.QTimer()
@@ -150,6 +180,7 @@ class EPhysGraph(QWidget):
             self.lastestDaqData, resistance = self.daq.getDataFromSquareWave(10, 50000, 0.5, 0.5, 0.25)
             if resistance is not None:
                 self.resistanceDeque.append(resistance)
+                self.resistanceLabel.setText("Resistance: {:.2f} MOhms\t".format(resistance / 1e6))
 
     def update_plot(self):
         #update current graph
@@ -169,3 +200,22 @@ class EPhysGraph(QWidget):
         resistanceDeque = [i for i in range(len(self.resistanceDeque))]
         self.resistancePlot.plot(resistanceDeque, self.resistanceDeque, pen='k')
 
+        self.pressureCommandBox.setPlaceholderText("{:.2f} (mbar)".format(self.pressureController.measure()))
+        self.pressureCommandBox.returnPressed.connect(self.pressureCommandBoxReturnPressed)
+
+    def pressureCommandBoxReturnPressed(self):
+        '''Manually change pressure setpoint
+        '''
+
+        #get text from box
+        text = self.pressureCommandBox.text()
+        self.pressureCommandBox.clear()
+
+        #try to convert to float
+        try:
+            pressure = float(text)
+        except ValueError:
+            return
+
+        #set pressure
+        self.pressureController.set_pressure(pressure)

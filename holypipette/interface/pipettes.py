@@ -58,6 +58,14 @@ class PipetteInterface(TaskInterface):
     def connect(self, main_gui):
         pass #TODO: unused?
 
+    @blocking_command(category='Manipulators',
+             description='Move to a repeatable position in the z axis (eliminate backlash)',
+             task_description='Moving to a repeatable position in the z axis',
+             default_arg=10)
+    def fix_backlash(self, none):
+        self.execute(self.microscope.fix_backlash)
+
+
     @command(category='Manipulators',
              description='Record a calibration point at the current position',
              default_arg=10)
@@ -209,5 +217,4 @@ class PipetteInterface(TaskInterface):
     def go_to_floor(self):
         if self.microscope.floor_Z is None:
             raise RuntimeError("Coverslip floor must be set.")
-        self.execute(self.microscope.absolute_move,
-                     argument=self.microscope.floor_Z)
+        self.execute(self.microscope.move_to_floor)

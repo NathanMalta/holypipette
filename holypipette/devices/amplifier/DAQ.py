@@ -165,7 +165,7 @@ class DAQ:
         return data
 
     def _shiftWaveToZero(self, data, lowZero=True):
-        mean = np.mean(data)
+        mean = np.median(data)
 
         if lowZero:
             zeroAvg = np.mean(data[data < mean])
@@ -207,10 +207,12 @@ class DAQ:
             secondFallingEdge = np.where(shiftedData < triggerVal)[0][0]
             
             #find peak to peak spread on high side
-            highPeak = np.max(shiftedData[5:secondFallingEdge-5:])
-            lowPeak = np.min(shiftedData[5:secondFallingEdge-5:])
-            peakToPeak = highPeak - lowPeak
-            # print(f'Peak to peak: {peakToPeak * 1e12} ({highPeak * 1e12} - {lowPeak * 1e12})')
+            highSide = shiftedData[5:secondFallingEdge-5:]
+            if highSide.size > 0:
+                highPeak = np.max(highSide)
+                lowPeak = np.min(highSide)
+                peakToPeak = highPeak - lowPeak
+                # print(f'Peak to peak: {peakToPeak * 1e12} ({highPeak * 1e12} - {lowPeak * 1e12})')
 
             #find second rising edge after falling edge
             secondRisingEdge = np.where(shiftedData[secondFallingEdge:] > triggerVal)[0][0] + secondFallingEdge

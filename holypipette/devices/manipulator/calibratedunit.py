@@ -255,6 +255,8 @@ class CalibratedUnit(ManipulatorUnit):
         if self.must_be_recalibrated:
             raise CalibrationError('Pipette offsets must be recalibrated')
         
+        self.microscope.absolute_move(self.reference_position()[2] + 200)
+        self.microscope.wait_until_still()
         self.microscope.absolute_move(self.reference_position()[2])
         self.microscope.wait_until_still()
 
@@ -499,9 +501,9 @@ class CalibratedStage(CalibratedUnit):
             self.stage.calibrate()
 
         self.info('Preparing stage calibration')
-        self.info("auto focusing microscope...")
-        self.focusHelper.autofocus(dist=self.config.autofocus_dist)
-        self.info("Finished focusing.")
+        # self.info("auto focusing microscope...")
+        # self.focusHelper.autofocus(dist=self.config.autofocus_dist)
+        # self.info("Finished focusing.")
 
         # use LK optical flow to determine transformation matrix
         mat = self.stageCalHelper.calibrate(dist=self.config.stage_diag_move)

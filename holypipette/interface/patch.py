@@ -3,6 +3,7 @@
 Control of automatic patch clamp algorithm
 '''
 import numpy as np
+import cv2
 
 from holypipette.config import Config, NumberWithUnit, Number, Boolean
 from holypipette.interface import TaskInterface, command, blocking_command
@@ -93,8 +94,8 @@ class AutoPatchInterface(TaskInterface):
             task_description='Move the cell sorter to a cell')
     def move_cellsorter_to_cell(self):
         #grab cell from list
-        cellx = self.cells_to_patch[0][0]
-        celly = self.cells_to_patch[0][1]
+        cellx = self.cells_to_patch[0][0][0]
+        celly = self.cells_to_patch[0][0][1]
         cellz = self.pipette_controller.calibrated_unit.microscope.floor_Z
 
         #move cell sorter to cell
@@ -113,6 +114,7 @@ class AutoPatchInterface(TaskInterface):
     def add_cell(self, position):
         #add half the size of the camera image to the position to get the center of the cell
         position = np.array(position)
+
         position[0] += self.current_autopatcher.calibrated_unit.camera.width/2
         position[1] += self.current_autopatcher.calibrated_unit.camera.height/2
         print(f'adding cell... {self.is_selecting_cells}')
@@ -120,12 +122,21 @@ class AutoPatchInterface(TaskInterface):
             print('Adding cell at', position, 'to list of cells to patch')
             stage_pos_pixels = self.current_autopatcher.calibrated_stage.reference_position()
             stage_pos_pixels[0:2] -= position
-            self.cells_to_patch.append(np.array(stage_pos_pixels))
+            #take a 256x256 image centered on the cell
+            img = self.current_autopatcher.calibrated_unit.camera.get_16bit_image()
+            img = img[int(position[1]-128):int(position[1]+128), int(position[0]-128):int(position[0]+128)]
+            if img is None or img.shape != (256, 256):
+                raise RuntimeError('Cell too Close to edge!')
+            
+            #save the image
+            # img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+            # cv2.imwrite(f'cell_{len(self.cells_to_patch)}.png', img)
+            self.cells_to_patch.append((np.array(stage_pos_pixels), img))
             self.is_selecting_cells = False
 
     def update_camera_cell_list(self):
         self.current_autopatcher.calibrated_unit.camera.cell_list = []
-        for cell in self.cells_to_patch:
+        for cell, img in self.cells_to_patch:
             camera_pos = -cell + self.current_autopatcher.calibrated_stage.reference_position()
             self.current_autopatcher.calibrated_unit.camera.cell_list.append(camera_pos[0:2].astype(int))
             
@@ -133,9 +144,9 @@ class AutoPatchInterface(TaskInterface):
     @blocking_command(category='Patch', description='Move to cell and patch it',
                       task_description='Moving to cell and patching it')
     def patch(self):
-        cell = self.cells_to_patch[0]
+        cell, img = self.cells_to_patch[0]
         self.execute(self.current_autopatcher.patch,
-                     argument=cell)
+                     argument=(cell, img))
         time.sleep(2)
         self.cells_to_patch = self.cells_to_patch[1:]
         
