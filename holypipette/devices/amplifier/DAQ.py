@@ -239,9 +239,11 @@ class DAQ:
 class FakeDAQ:
     def __init__(self):
         self.latestResistance = 6 * 10 ** 6
+        self.latest_protocol_data = None
+        self.isRunningCurrentProtocol = False
 
     def resistance(self):
-        return self.latestResistance * math.sin(time.time() / 20) + self.latestResistance + 4*10**6
+        return self.latestResistance + np.random.normal(0, 0.1 * 10 ** 6)
 
     def getDataFromSquareWave(self, wave_freq, samplesPerSec, dutyCycle, amplitude, recordingTime):
         #create a wave_freq Hz square wave
