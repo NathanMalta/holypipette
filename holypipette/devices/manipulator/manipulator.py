@@ -88,7 +88,7 @@ class Manipulator(TaskController):
         '''
         return array([self.position(axis) for axis in axes])
 
-    def absolute_move_group(self, x, axes):
+    def absolute_move_group(self, x, axes, speed=None):
         '''
         Moves the device group of axes to position x.
 
@@ -100,7 +100,7 @@ class Manipulator(TaskController):
         for xi,axis in zip(x,axes):
             self.absolute_move(xi, axis)
 
-    def relative_move_group(self, x, axes):
+    def relative_move_group(self, x, axes, speed=None):
         '''
         Moves the device group of axes by relative amount x in um.
 

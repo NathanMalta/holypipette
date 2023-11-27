@@ -126,7 +126,7 @@ class ScientificaSerialEncoder(Manipulator):
                 print('retrying')
                 self.absolute_move(pos, axis)
     
-    def absolute_move_group(self, x, axes):
+    def absolute_move_group(self, x, axes, speed=None):
         x = list(x)
         axes = list(axes)
         if 1 in axes and 2 in axes:
@@ -137,7 +137,7 @@ class ScientificaSerialEncoder(Manipulator):
         else:
             print(f'unimplemented move group {x} {axes}')
     
-    def relative_move_group(self, pos, axis):
+    def relative_move_group(self, pos, axis, speed=None):
         if axis == 1:
             self._sendCmd(SerialCommands.SET_X_Y_POS_REL.format(pos, 0))
         if axis == 2:

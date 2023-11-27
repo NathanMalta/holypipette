@@ -84,7 +84,7 @@ class FakeManipulator(Manipulator):
         self.x[axis-1] = self.setpoint[axis-1]
         return False
 
-    def absolute_move(self, x, axis):
+    def absolute_move(self, x, axis, speed=None):
         '''
         Moves the device axis to position x.
 
@@ -107,7 +107,7 @@ class FakeManipulator(Manipulator):
         self.speeds[axis-1] = self.max_speed * math.copysign(1, x - self.x[axis-1])
 
 
-    def absolute_move_group(self, x, axes):
+    def absolute_move_group(self, x, axes, speed=None):
         for xi,axis in zip(x,axes):
             print(axis, xi)
             self.absolute_move(xi, axis)
